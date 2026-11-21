@@ -13,7 +13,8 @@ import com.fullmoney.web.Params;
 /**
  * 幣別轉換，透過新台幣換算
  *
- * <p>參數：amount 金額、from / to 幣別、fromRate / toRate 1 單位該幣別可換多少新台幣（新台幣固定為 1，不必送出）</p>
+ * <p>參數：amount 金額、from / to 幣別、fromRate / toRate 1 單位該幣別可換多少新台幣（新台幣固定為 1，不必送出）、
+ * round=1 結果四捨五入到整數（不送出時到小數兩位）</p>
  */
 public final class CurrencyApi extends ApiEndpoint {
 
@@ -32,13 +33,15 @@ public final class CurrencyApi extends ApiEndpoint {
 		CurrencyType to = params.choice("to", "目標幣別", CurrencyType.values());
 		BigDecimal fromRate = rate(params, from, "fromRate");
 		BigDecimal toRate = rate(params, to, "toRate");
+		boolean whole = Values.wholeMoney(params);
 
 		BigDecimal crossRate = converter.crossRate(fromRate, toRate).setScale(CROSS_RATE_SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
 
 		Map<String, Object> out = new LinkedHashMap<>();
 		out.put("from", from.name());
 		out.put("to", to.name());
-		out.put("result", converter.convert(amount, fromRate, toRate));
+		out.put("decimals", Values.moneyDecimals(whole));
+		out.put("result", Values.money(converter.convert(amount, fromRate, toRate), whole));
 		out.put("crossRate", crossRate.toPlainString());
 		return out;
 	}

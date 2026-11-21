@@ -8,6 +8,11 @@ public class SaveMoney {
 
 	private BigDecimal amount=BigDecimal.ZERO;
 
+	/**
+	 * 本年額外增加投入：比前一年多投入的金額，第 1 年為 0
+	 * */
+	private BigDecimal addAmount=BigDecimal.ZERO;
+
 	private BigDecimal interestRate=BigDecimal.ZERO;
 
 	/**
@@ -39,6 +44,14 @@ public class SaveMoney {
 
 	public void setAmount(BigDecimal amount) {
 		this.amount = amount;
+	}
+
+	public BigDecimal getAddAmount() {
+		return addAmount;
+	}
+
+	public void setAddAmount(BigDecimal addAmount) {
+		this.addAmount = addAmount;
 	}
 
 	public BigDecimal getInterestRate() {

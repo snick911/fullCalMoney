@@ -319,6 +319,40 @@ select.input option { background: var(--surface); color: var(--fg); }
 .fieldset legend + * { clear: both; }
 .fieldset__hint { color: var(--muted); font-weight: 400; }
 
+/* 勾選框：整列可點，觸控高度與輸入框相同 */
+.check {
+  display: flex; align-items: center; gap: .55rem; width: fit-content;
+  min-height: 2.75rem; margin-top: .5rem;
+  font-size: .9375rem; font-weight: 600; cursor: pointer;
+}
+.check input { flex: none; width: 1.15rem; height: 1.15rem; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+/* 表單最下方：勾選框靠左、按鈕靠右，窄螢幕換行 */
+.form-foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem;
+  margin-top: .75rem;
+}
+.form-foot .check { margin-top: 0; }
+.btn--primary { background: var(--accent); color: var(--on-accent); }
+.btn--primary:hover { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
+
+/* 複利（浮動）：最低～最高區間 */
+.ranges {
+  display: grid; gap: .75rem; margin-top: .9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  align-items: start;
+}
+.range {
+  min-width: 0; margin: 0; padding: .7rem .85rem .2rem;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--stripe);
+}
+.range legend { float: left; width: 100%; padding: 0; margin-bottom: .5rem; font-weight: 700; font-size: .9375rem; }
+.range legend + * { clear: both; }
+.range__hint { color: var(--muted); font-weight: 400; font-size: .8125rem; }
+.range__inputs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .5rem; align-items: start; }
+/* 與輸入框對齊：標籤字級 .875rem × 行高 1.6 + 間距 .3rem */
+.range__sep { margin-top: 1.7rem; line-height: 2.75rem; color: var(--muted); }
+
 .form-alert {
   margin: 1rem 0 0; padding: .65rem .85rem;
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: 9px;
@@ -441,6 +475,7 @@ select.input option { background: var(--surface); color: var(--fg); }
 .data-table thead tr > :first-child { z-index: 3; }
 .data-table tbody tr:last-child > * { border-bottom: 0; }
 .data-table .is-accent { color: var(--accent); font-weight: 700; }
+.data-table .is-down { color: var(--danger); }
 .data-table .empty { text-align: center; color: var(--muted); padding: 1.5rem; }
 .data-table--summary tr > :first-child { text-align: left; }
 .data-table--summary tbody th { background: var(--surface); color: var(--fg); font-weight: 700; }
@@ -484,7 +519,7 @@ select.input option { background: var(--surface); color: var(--fg); }
 }
 
 @media print {
-  .site-header, .footer, .card__head .btn, .advanced, .settings { display: none !important; }
+  .site-header, .footer, .card__head .btn, .form-foot .btn, .advanced, .settings { display: none !important; }
   .table-wrap { max-height: none; overflow: visible; }
   body { background: #fff; color: #000; }
 }

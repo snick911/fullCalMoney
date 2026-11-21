@@ -1,7 +1,7 @@
 # FullMoney 理財試算（網頁版）
 
 以 **Java 17** 開發的響應式（RWD）理財試算網站，手機、平板、電腦都能使用。
-計算邏輯沿用桌面版 FullMoney 1.4.0 的 `service` 與 `bean`（未修改公式），**不含大樂透分析**。
+計算邏輯沿用桌面版 FullMoney 1.4.0 的 `service` 與 `bean`（複利試算另外加入「原始本金」，其餘未修改公式），**不含大樂透分析**。
 
 **線上版（GitHub Pages）：<https://snick911.github.io/fullCalMoney/>**
 
@@ -16,14 +16,17 @@
 
 | 分頁 | 內容 |
 | --- | --- |
-| 複利試算 | 依第一年本金、年利率、每年加碼與年數，試算逐年累積財富 |
+| 複利試算 | 原始本金（第 1 年年初投入一次）、每年固定投入金額、每年額外增加投入（第 2 年起每年多投入固定金額）、年利率與年數，試算逐年累積財富 |
+| 複利試算（浮動） | 同上，但「每年額外增加投入」與「期望年利率」改為最低～最高區間，每年在區間內隨機取值（年利率取到 0.01%、可為負數；金額取到元）。按「重新計算」或修改條件都會重新產生亂數 |
 | 房貸計算 | 本息／本金平均攤還、寬限期、分段利率、提前還款（縮短年限或降低月付），列出每期攤還明細 |
 | 債券計算 | 持有到期的配息、總報酬率、到期殖利率（YTM）、年化報酬率；外幣債券換回台幣的報酬與匯兌損益 |
 | 幣別轉換 | 透過新台幣換算兩種幣別，可一鍵交換 |
 
 - 條件一改就自動重算，計算全部在 Java 後端執行。
 - 金額欄位離開時自動補千分位，並顯示「萬／億」換算；可輸入全形數字。
+- 複利、債券、幣別轉換有「金額不顯示小數（四捨五入）」選項，預設勾選。由 Java 端從完整數值四捨五入到整數（`HALF_UP`），不會先進位到小數兩位再進位；百分比不受影響。房貸本來就四捨五入到元，沒有這個選項。
 - 輸入不合理時（例如寬限期不短於年限），欄位標紅並顯示原因，上一次的結果淡化保留。
+- **保存試算條件**：每次試算都會把各分頁的條件（含房貸清單、浮動試算的亂數種子）存到瀏覽器的 localStorage，下次開啟時自動還原並重算，看到的就是上次的結果；網址沒有指定分頁時回到上次的分頁。按「恢復預設」回到預設值。詳見下方「資料保存」。
 - **外觀設定**（右上角「外觀設定」）：
   - 主題色系 6 種：淺色、護眼暗色、深色、護眼米黃、海洋藍、櫻花粉。
   - 字體大小 4 段：小（14px）、中（16px）、大（19px）、特大（22px）。版面全部以 rem 計算，字體放大時欄位會自動減少欄數。
@@ -77,9 +80,10 @@ $env:HOST = '0.0.0.0'; java -jar target\fullcalmoney.jar
 cmd /c test.bat
 ```
 
-`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 42 項，全部通過時結束代碼為 0：
+`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 64 項，全部通過時結束代碼為 0：
 
 - 試算結果與桌面版文件記載的數值相同（見下方「計算參考值」）。
+- 浮動複利：區間上下限相同時與固定複利相同；相同種子結果相同、不同種子結果不同；每年的值都在區間內；固定種子的結果不可改變（否則使用者保存的種子會算出不同結果）。
 - 輸入檢查：拒絕科學記號、超出範圍、位數過多；接受千分位與全形數字。
 - 伺服器與瀏覽器端引擎共用的 `ApiEndpoint.execute`：正常結果、錯誤欄位、千分位格式。
 - 實際啟動伺服器呼叫 API：正常結果、錯誤欄位、未知路徑、路徑穿越與 `.class` 檔都回 404。
@@ -94,6 +98,7 @@ src/main/java/com/fullmoney/
 ├─ AppVersion.java          名稱與版本號（頁尾與 /api/meta 由此取得）
 ├─ bean/                    沿用桌面版：複利、房貸、債券的條件與結果
 ├─ service/                 沿用桌面版：MoneyCalculator、MortgageCalculator、BondCalculator、CurrencyConverter
+│                           新增：FloatingMoneyCalculator（浮動複利）、RangeRandom（可重現的亂數，SplitMix64）
 └─ web/
    ├─ ApiEndpoint.java      一個 API：參數 → 結果，不依賴 HttpServer，伺服器與瀏覽器端引擎共用
    ├─ ApiHandler.java       把 ApiEndpoint 接到 HttpServer：路徑、請求方式、錯誤紀錄
@@ -102,12 +107,12 @@ src/main/java/com/fullmoney/
    ├─ Json.java / Numbers.java   最小 JSON 輸出、千分位格式
    ├─ StaticHandler.java    從 classpath 提供網頁檔（副檔名白名單、ETag）
    ├─ Http.java             回應標頭（CSP 等安全標頭）、gzip
-   └─ api/                  ApiEndpoints（清單）、CompoundApi、MortgageApi、BondApi、CurrencyApi、MetaApi
+   └─ api/                  ApiEndpoints（清單）、CompoundApi、FloatingCompoundApi、MortgageApi、BondApi、CurrencyApi、MetaApi
 src/main/resources/static/
 ├─ index.html               四個分頁的版面
 ├─ css/app.css              主題色系、字體大小、RWD
 ├─ js/boot.js               畫面繪製前套用主題與字體，避免閃爍
-├─ js/app.js                即時重算、外觀設定、分頁切換
+├─ js/app.js                即時重算、外觀設定、分頁切換、保存與還原試算條件
 └─ js/engine.js             伺服器版的空殼；Pages 建置時換成 TeaVM 編譯的試算引擎
 src/pages/java/com/fullmoney/pages/BrowserEngine.java   Pages 版的瀏覽器端引擎（只在 Maven pages 設定檔編譯）
 src/test/java/com/fullmoney/CalculatorCheck.java         自我檢查
@@ -146,10 +151,13 @@ mvn -P pages clean process-classes
 | 路徑 | 參數 |
 | --- | --- |
 | `GET /api/meta` | 無。回傳版本號與下拉選單選項（幣別與範例匯率、配息頻率、還款方式、提前還款方式） |
-| `/api/compound` | `baseAmount`、`rate`、`addAmount`、`years` |
+| `/api/compound` | `initialAmount`（原始本金）、`baseAmount`（每年固定投入金額）、`rate`、`addAmount`（每年額外增加投入）、`years` |
+| `/api/floating` | `initialAmount`、`baseAmount`、`addMin`、`addMax`、`rateMin`、`rateMax`（-100～100）、`years`、`seed`（0～999,999,999，相同種子結果相同；不送時隨機產生，回傳的 `seed` 為實際使用的種子） |
 | `/api/mortgage` | `loanAmount`、`rate`、`years`、`graceYears`、`method`、`prepaymentMode`；分段利率以 `ratePeriod` + `rateValue` 成對重複送出，提前還款以 `prepayPeriod` + `prepayAmount` 成對重複送出 |
 | `/api/bond` | `currency`、`faceValue`、`buyPrice`、`redemptionPrice`、`couponRate`、`frequency`、`years`、`feeRate`、`taxRate`、`buyExchangeRate`、`couponExchangeRate`、`redemptionExchangeRate`（新台幣不必送匯率） |
 | `/api/currency` | `amount`、`from`、`fromRate`、`to`、`toRate`（新台幣不必送匯率） |
+
+`/api/compound`、`/api/floating`、`/api/bond`、`/api/currency` 可另外送 `round=1`，金額四捨五入到整數；不送時到小數兩位。回傳的 `decimals` 是金額的小數位數（0 或 2）。
 
 條件不合理時回傳 `400`，內容為 `{"error": "給使用者看的訊息", "field": "欄位名稱"}`；清單欄位為 `名稱:索引`，例如 `prepayPeriod:0`。
 
@@ -165,7 +173,9 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 
 | 情境 | 結果 |
 | --- | --- |
-| 複利預設（20 萬、4%、每年加 1 萬、20 年） | 累積財富 $8,736,140.77 |
+| 複利預設（原始本金 0、每年投入 20 萬、4%、每年加 1 萬、20 年） | 累積財富 $8,736,140.77（不顯示小數時 $8,736,141） |
+| 複利＋原始本金 100 萬 | 投入 $6,900,000，累積財富 $10,927,263.92（多出 100 萬 × 1.04²⁰） |
+| 浮動複利（20 萬、加 5,000～15,000、2%～6%、20 年、種子 123456789） | 累積財富 $8,514,979 |
 | 房貸預設（1000 萬、2.2%、30 年、本息平均） | 月付 $37,970、利息總額 $3,669,232 |
 | 房貸＋第 25 期起 2.5% | 利息總額 $4,156,549 |
 | 房貸＋第 25 期提前還 100 萬，縮短年限 | 26 年 2 個月還清，省 $770,918 |
@@ -182,6 +192,27 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 
 對比度沿用桌面版的規則（WCAG）：`--fg` 對 `--bg`／`--surface`／`--stripe` 至少 7:1；`--muted`、`--accent` 對底色至少 4.5:1；`--on-accent` 對 `--accent`、`--selection-fg` 對 `--selection` 至少 4.5:1。目前六個主題都已實測通過。
 
+## 資料保存
+
+| 鍵（localStorage） | 內容 |
+| --- | --- |
+| `fm.theme`、`fm.font` | 外觀設定 |
+| `fm.page` | 上次開啟的分頁 |
+| `fm.form.分頁` | 該分頁的試算條件（JSON，含保存時間 `savedAt`），每次試算時寫入 |
+
+用 localStorage 而不是 cookie：
+
+- **沒有到期日**，不需要設定保留天數，會一直保留到使用者清除網站資料（因此超過 180 天）。cookie 必須設定期限，而且 Safari 對網頁程式寫入的 cookie 最多只保留 7 天。
+- 資料只存在使用者自己的裝置，不會隨每個請求送到伺服器；GitHub Pages 版也不能由伺服器寫入 cookie。
+- 容量約 5 MB，cookie 只有約 4 KB，房貸清單最多 240 筆可能放不下。
+
+瀏覽器本身的限制（cookie 也一樣受限，無法由網站避開）：
+
+- 無痕／私密瀏覽：關閉視窗後清除。
+- Safari（iPhone、iPad、Mac）：使用 Safari 期間連續 7 天沒有開啟本網站，會刪除網站寫入的資料。加入主畫面的網頁不受此限。
+- 使用者手動清除瀏覽資料，或瀏覽器設定為關閉時清除網站資料。
+- 同一台電腦的其他人也看得到上次的試算條件；共用電腦可按「恢復預設」。
+
 ## 安全性
 
 - 回應附 Content-Security-Policy（只允許同源的 script、style）、`X-Content-Type-Options`、`X-Frame-Options`。
@@ -191,7 +222,7 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 ## 已知限制
 
 - 匯率由使用者輸入，不連網抓取；幣別的預設匯率只是範例。
-- 沒有帳號，也不保存試算條件，重新整理後回到預設值（外觀設定會保存）。
+- 沒有帳號，試算條件只保存在各自的瀏覽器，換裝置或換瀏覽器看不到（見「資料保存」）。
 - 內建 HttpServer 適合個人或內部使用；對外公開時建議放在 Nginx、IIS 等反向代理之後並啟用 HTTPS。
 - 網站執行中無法重新建置（jar 檔被占用），請先 `Ctrl+C` 停止。
 - GitHub Pages 版第一次開啟要多下載約 240 KB 的試算引擎（壓縮傳輸後較小）。

@@ -3,6 +3,8 @@ package com.fullmoney.web.api;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+import com.fullmoney.web.Params;
+
 /**
  * API 共用的輸入範圍與輸出數值格式
  */
@@ -26,6 +28,26 @@ final class Values {
 	 */
 	static BigDecimal money(BigDecimal amount) {
 		return amount == null ? null : amount.setScale(MONEY_SCALE, RoundingMode.HALF_EVEN);
+	}
+
+	/**
+	 * @param whole true 時四捨五入到整數（不顯示小數），false 時同 {@link #money(BigDecimal)}
+	 */
+	static BigDecimal money(BigDecimal amount, boolean whole) {
+		if (amount == null || !whole) {
+			return money(amount);
+		}
+		return amount.setScale(0, RoundingMode.HALF_UP);
+	}
+
+	/** 網頁的「金額不顯示小數」勾選框，勾選時送出 round=1 */
+	static boolean wholeMoney(Params params) {
+		return params.flag("round");
+	}
+
+	/** 回傳給網頁的金額小數位數 */
+	static int moneyDecimals(boolean whole) {
+		return whole ? 0 : MONEY_SCALE;
 	}
 
 	/**

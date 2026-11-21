@@ -37,6 +37,7 @@
   <nav class="tabs" aria-label="試算項目">
     <div class="tabs__inner container">
       <a class="tab" href="#compound" data-page="compound">複利試算</a>
+      <a class="tab" href="#floating" data-page="floating">複利試算（浮動）</a>
       <a class="tab" href="#mortgage" data-page="mortgage">房貸計算</a>
       <a class="tab" href="#bond" data-page="bond">債券計算</a>
       <a class="tab" href="#currency" data-page="currency">幣別轉換</a>
@@ -66,7 +67,7 @@
           <label><input type="radio" name="font" value="xl"><span class="segmented__xl">特大</span></label>
         </div>
       </fieldset>
-      <p class="settings__note">設定會保存在這台裝置的瀏覽器。</p>
+      <p class="settings__note">外觀設定與各分頁的試算條件會保存在這台裝置的瀏覽器，下次開啟時自動還原。</p>
     </div>
     </div>
   </div>
@@ -78,7 +79,7 @@
   <section class="page" id="page-compound" data-page="compound" aria-labelledby="h-compound">
     <div class="page__head">
       <h1 id="h-compound">複利試算</h1>
-      <p class="page__desc">每年年初投入本金、年底依利率計息，試算逐年累積的財富。</p>
+      <p class="page__desc">第 1 年年初投入原始本金；每年年初投入固定金額，投入金額每年再額外增加固定金額；年底依利率計息，試算逐年累積的財富。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/compound">
@@ -88,8 +89,18 @@
       </div>
       <div class="fields">
         <div class="field">
-          <label for="c-base">第一年投入本金</label>
+          <label for="c-initial">原始本金</label>
+          <div class="input-wrap"><input class="input" id="c-initial" name="initialAmount" data-kind="money" inputmode="numeric" value="0"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="c-base">每年固定投入金額</label>
           <div class="input-wrap"><input class="input" id="c-base" name="baseAmount" data-kind="money" inputmode="numeric" value="200,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="c-add">每年額外增加投入</label>
+          <div class="input-wrap"><input class="input" id="c-add" name="addAmount" data-kind="money" inputmode="numeric" value="10,000"><span class="input-affix">元</span></div>
           <span class="field__hint" data-hint></span>
         </div>
         <div class="field">
@@ -97,15 +108,11 @@
           <div class="input-wrap"><input class="input" id="c-rate" name="rate" inputmode="decimal" value="4"><span class="input-affix">%</span></div>
         </div>
         <div class="field">
-          <label for="c-add">每年投入額外增加</label>
-          <div class="input-wrap"><input class="input" id="c-add" name="addAmount" data-kind="money" inputmode="numeric" value="10,000"><span class="input-affix">元</span></div>
-          <span class="field__hint" data-hint></span>
-        </div>
-        <div class="field">
           <label for="c-years">總年數</label>
           <div class="input-wrap"><input class="input" id="c-years" name="years" inputmode="numeric" value="20"><span class="input-affix">年</span></div>
         </div>
       </div>
+      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
     </form>
 
@@ -121,6 +128,97 @@
         <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
           <table class="data-table">
             <thead><tr><th scope="col">年度</th><th scope="col">本金加入</th><th scope="col">本年利息</th><th scope="col">純本金部位</th><th scope="col">累積財富</th></tr></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 複利試算（浮動） -->
+  <section class="page" id="page-floating" data-page="floating" aria-labelledby="h-floating" hidden>
+    <div class="page__head">
+      <h1 id="h-floating">複利試算（浮動）</h1>
+      <p class="page__desc">每年的年利率與額外增加投入在你設定的區間內隨機取值，模擬報酬有高有低的情況；按「重新計算」產生另一組結果。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/floating">
+      <div class="card__head">
+        <h2>試算條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="f-initial">原始本金</label>
+          <div class="input-wrap"><input class="input" id="f-initial" name="initialAmount" data-kind="money" inputmode="numeric" value="0"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="f-base">每年固定投入金額</label>
+          <div class="input-wrap"><input class="input" id="f-base" name="baseAmount" data-kind="money" inputmode="numeric" value="200,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="f-years">總年數</label>
+          <div class="input-wrap"><input class="input" id="f-years" name="years" inputmode="numeric" value="20"><span class="input-affix">年</span></div>
+        </div>
+      </div>
+      <div class="ranges">
+        <fieldset class="range">
+          <legend>每年額外增加投入 <span class="range__hint">（第 2 年起每年取一次）</span></legend>
+          <div class="range__inputs">
+            <div class="field">
+              <label for="f-add-min">最低</label>
+              <div class="input-wrap"><input class="input" id="f-add-min" name="addMin" data-kind="money" inputmode="numeric" value="5,000"><span class="input-affix">元</span></div>
+              <span class="field__hint" data-hint></span>
+            </div>
+            <span class="range__sep" aria-hidden="true">～</span>
+            <div class="field">
+              <label for="f-add-max">最高</label>
+              <div class="input-wrap"><input class="input" id="f-add-max" name="addMax" data-kind="money" inputmode="numeric" value="15,000"><span class="input-affix">元</span></div>
+              <span class="field__hint" data-hint></span>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="range">
+          <legend>期望年利率 <span class="range__hint">（每年取一次，可輸入負數）</span></legend>
+          <div class="range__inputs">
+            <div class="field">
+              <label for="f-rate-min">最低</label>
+              <div class="input-wrap"><input class="input" id="f-rate-min" name="rateMin" value="2"><span class="input-affix">%</span></div>
+            </div>
+            <span class="range__sep" aria-hidden="true">～</span>
+            <div class="field">
+              <label for="f-rate-max">最高</label>
+              <div class="input-wrap"><input class="input" id="f-rate-max" name="rateMax" value="6"><span class="input-affix">%</span></div>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+      <input type="hidden" name="seed">
+      <div class="form-foot">
+        <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
+        <button type="button" class="btn btn--primary" data-reroll>
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4.5 11a7.5 7.5 0 0 1 13-4.2L20 9"/><path d="M20 4v5h-5"/><path d="M19.5 13a7.5 7.5 0 0 1-13 4.2L4 15"/><path d="M4 20v-5h5"/></svg>重新計算
+        </button>
+      </div>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">投入金額</span><span class="tile__value" data-out="totalBaseAmount">—</span></div>
+        <div class="tile"><span class="tile__label">獲利金額</span><span class="tile__value" data-out="gains">—</span></div>
+        <div class="tile"><span class="tile__label">投資報酬率</span><span class="tile__value" data-out="gainRate">—</span></div>
+        <div class="tile"><span class="tile__label">平均年利率</span><span class="tile__value" data-out="averageRate">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label">累積財富</span><span class="tile__value" data-out="totalSumAmount">—</span></div>
+      </div>
+      <p class="note">年利率取到 0.01%、額外增加投入取到元，在區間內（含上下限）平均隨機產生。改條件或按「重新計算」都會重新產生；重新開啟網頁時顯示上次的結果。試算僅供參考。</p>
+      <div class="card card--flush">
+        <div class="card__head"><h2>逐年明細</h2></div>
+        <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
+          <table class="data-table">
+            <thead><tr><th scope="col">年度</th><th scope="col">年利率</th><th scope="col">額外增加</th><th scope="col">本金加入</th><th scope="col">本年利息</th><th scope="col">純本金部位</th><th scope="col">累積財富</th></tr></thead>
             <tbody data-rows></tbody>
           </table>
         </div>
@@ -290,6 +388,7 @@
           </div>
         </div>
       </fieldset>
+      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
     </form>
 
@@ -368,6 +467,7 @@
           </div>
         </div>
       </div>
+      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
     </form>
 

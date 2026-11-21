@@ -20,8 +20,10 @@ import com.fullmoney.bean.MortgageRateChange;
 import com.fullmoney.bean.MortgageResult;
 import com.fullmoney.bean.PrepaymentMode;
 import com.fullmoney.bean.RepaymentMethod;
+import com.fullmoney.bean.SaveMoney;
 import com.fullmoney.service.BondCalculator;
 import com.fullmoney.service.CurrencyConverter;
+import com.fullmoney.service.FloatingMoneyCalculator;
 import com.fullmoney.service.MoneyCalculator;
 import com.fullmoney.service.MortgageCalculator;
 import com.fullmoney.web.ApiEndpoint;
@@ -48,6 +50,7 @@ public final class CalculatorCheck {
 
 	public static void main(String[] args) throws Exception {
 		compound();
+		floating();
 		mortgage();
 		bond();
 		currency();
@@ -61,8 +64,54 @@ public final class CalculatorCheck {
 	}
 
 	private static void compound() {
-		var result = new MoneyCalculator().calculate(new BigDecimal("200000"), new BigDecimal("0.04"), new BigDecimal("10000"), 20);
+		MoneyCalculator calculator = new MoneyCalculator();
+		BigDecimal rate = new BigDecimal("0.04");
+		var result = calculator.calculate(BigDecimal.ZERO, new BigDecimal("200000"), rate, new BigDecimal("10000"), 20);
 		check("compound wealth", "8736140.77", result.getTotalSumAmount().setScale(2, RoundingMode.HALF_EVEN).toPlainString());
+
+		//原始本金 100 萬只在第 1 年投入：100 萬 × 1.04^20 + 上面的 8,736,140.77
+		var initial = calculator.calculate(new BigDecimal("1000000"), new BigDecimal("200000"), rate, new BigDecimal("10000"), 20);
+		check("compound initial wealth", "10927263.92", initial.getTotalSumAmount().setScale(2, RoundingMode.HALF_EVEN).toPlainString());
+		check("compound initial base", "6900000", initial.getTotalBaseAmount().toPlainString());
+		check("compound year 1 amount", "1200000", initial.getYearList().get(0).getAmount().toPlainString());
+		check("compound year 2 amount", "210000", initial.getYearList().get(1).getAmount().toPlainString());
+	}
+
+	private static void floating() {
+		FloatingMoneyCalculator calculator = new FloatingMoneyCalculator();
+		BigDecimal base = new BigDecimal("200000");
+		//區間上下限相同時與固定的複利試算相同，與種子無關
+		var fixed = calculator.calculate(BigDecimal.ZERO, base, new BigDecimal("10000"), new BigDecimal("10000"), new BigDecimal("0.04"),
+				new BigDecimal("0.04"), 20, 987654321);
+		check("floating fixed range = compound", "8736140.77", fixed.getTotalSumAmount().setScale(2, RoundingMode.HALF_EVEN).toPlainString());
+
+		BigDecimal addMin = new BigDecimal("5000");
+		BigDecimal addMax = new BigDecimal("15000");
+		BigDecimal rateMin = new BigDecimal("-0.03");
+		BigDecimal rateMax = new BigDecimal("0.08");
+		var first = calculator.calculate(BigDecimal.ZERO, base, addMin, addMax, rateMin, rateMax, 100, 42);
+		var again = calculator.calculate(BigDecimal.ZERO, base, addMin, addMax, rateMin, rateMax, 100, 42);
+		var other = calculator.calculate(BigDecimal.ZERO, base, addMin, addMax, rateMin, rateMax, 100, 43);
+		check("floating same seed", first.getTotalSumAmount().toPlainString(), again.getTotalSumAmount().toPlainString());
+		check("floating other seed differs", true, first.getTotalSumAmount().compareTo(other.getTotalSumAmount()) != 0);
+
+		boolean inRange = true;
+		boolean hitLow = false;
+		boolean hitHigh = false;
+		for (SaveMoney year : first.getYearList()) {
+			BigDecimal rate = year.getInterestRate();
+			BigDecimal add = year.getAddAmount();
+			inRange &= rate.compareTo(rateMin) >= 0 && rate.compareTo(rateMax) <= 0 && rate.scale() <= 4;
+			hitLow |= rate.signum() < 0;
+			hitHigh |= rate.compareTo(new BigDecimal("0.06")) > 0;
+			if (year.getTheYear() == 1) {
+				inRange &= add.signum() == 0;
+			} else {
+				inRange &= add.compareTo(addMin) >= 0 && add.compareTo(addMax) <= 0 && add.scale() <= 0;
+			}
+		}
+		check("floating values in range", true, inRange);
+		check("floating values spread", true, hitLow && hitHigh);
 	}
 
 	private static void mortgage() {
@@ -123,6 +172,8 @@ public final class CalculatorCheck {
 		rejects("params too many digits", () -> Params.toDecimal("12345678901234", "x", "x", BigDecimal.ZERO, BigDecimal.TEN.pow(20)));
 		rejects("params integer decimal", () -> Params.toInteger("1.5", "x", "x", 0, 10));
 		check("params repeated keys", "[13, 25]", Params.parse("p=13&p=25&q=%E5%B9%B4").list("p").toString());
+		Params flags = Params.parse("a=1&b=0&c=on");
+		check("params flag", "true false true false", flags.flag("a") + " " + flags.flag("b") + " " + flags.flag("c") + " " + flags.flag("d"));
 	}
 
 	private static void json() {
@@ -141,9 +192,42 @@ public final class CalculatorCheck {
 		ApiResponse bad = mortgage.execute("loanAmount=1&rate=2.2&years=30&graceYears=0&method=NOPE");
 		check("endpoint bad choice", "400", String.valueOf(bad.getStatus()));
 		check("endpoint bad choice field", true, Json.write(bad.getBody()).contains("\"field\":\"method\""));
+
+		String compoundQuery = "initialAmount=1%2C000%2C000&baseAmount=200%2C000&rate=4&addAmount=10%2C000&years=20";
+		String cents = compound(compoundQuery);
+		check("endpoint compound cents", true, cents.contains("\"decimals\":2,") && cents.contains("\"totalSumAmount\":10927263.92,"));
+		String whole = compound(compoundQuery + "&round=1");
+		check("endpoint compound whole", true, whole.contains("\"decimals\":0,") && whole.contains("\"totalSumAmount\":10927264,"));
+		//四捨五入要從完整數值計算：2.495 到整數是 2，不能先變成 2.50 再進位成 3
+		check("endpoint round from full precision", true, compound("initialAmount=0&baseAmount=2.495&rate=0&addAmount=0&years=1&round=1")
+				.contains("\"totalSumAmount\":2,"));
+		check("endpoint round half up", true, compound("initialAmount=0&baseAmount=2.5&rate=0&addAmount=0&years=1&round=1")
+				.contains("\"totalSumAmount\":3,"));
+		check("endpoint compound initial required", true, compound("baseAmount=1&rate=0&addAmount=0&years=1").contains("\"field\":\"initialAmount\""));
+
+		String floatingQuery = "initialAmount=0&baseAmount=200%2C000&addMin=5%2C000&addMax=15%2C000&rateMin=2&rateMax=6&years=20&round=1";
+		String seeded = call("/api/floating", floatingQuery + "&seed=123456789");
+		check("endpoint floating seed echoed", true, seeded.contains("\"seed\":123456789,"));
+		check("endpoint floating reproducible", seeded, call("/api/floating", floatingQuery + "&seed=123456789"));
+		//固定種子的結果不可改變，否則使用者保存的種子重新開啟時會看到不同的結果
+		check("endpoint floating pinned", true, seeded.contains("\"totalSumAmount\":8514979,"));
+		check("endpoint floating random seed", true, call("/api/floating", floatingQuery).contains("\"seed\":"));
+		check("endpoint floating add range", true, call("/api/floating", floatingQuery.replace("addMax=15%2C000", "addMax=4000"))
+				.contains("\"field\":\"addMax\""));
+		check("endpoint floating rate range", true, call("/api/floating", floatingQuery.replace("rateMax=6", "rateMax=1"))
+				.contains("\"field\":\"rateMax\""));
 		check("numbers group negative", "-1,234,567.5", Numbers.group(new BigDecimal("-1234567.50"), 2));
 		check("numbers group small", "0.0001", Numbers.group(new BigDecimal("0.0001"), 4));
 		check("numbers group billion", "1,000,000,000", Numbers.group(new BigDecimal("1000000000"), 4));
+	}
+
+	private static String compound(String query) {
+		return call("/api/compound", query);
+	}
+
+	private static String call(String path, String query) {
+		ApiEndpoint endpoint = ApiEndpoints.all().stream().filter(e -> e.getPath().equals(path)).findFirst().orElseThrow();
+		return Json.write(endpoint.execute(query).getBody());
 	}
 
 	private static void http() throws Exception {
@@ -169,6 +253,8 @@ public final class CalculatorCheck {
 
 			HttpResponse<String> currency = get(client, base + "/api/currency?amount=1000&from=USD&fromRate=32&to=TWD");
 			check("http currency", true, currency.body().contains("\"result\":32000.00"));
+			HttpResponse<String> currencyWhole = get(client, base + "/api/currency?amount=1000&from=TWD&to=USD&toRate=32&round=1");
+			check("http currency whole", true, currencyWhole.body().contains("\"decimals\":0,\"result\":31,"));
 
 			check("http meta", true, get(client, base + "/api/meta").body().contains("\"version\":\"" + AppVersion.VERSION + "\""));
 			check("http unknown api", "404", String.valueOf(get(client, base + "/api/compoundx").statusCode()));

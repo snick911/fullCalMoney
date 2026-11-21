@@ -70,6 +70,16 @@ public final class Params {
 		return toInteger(first(name), name, label, min, max);
 	}
 
+	/** 勾選框：沒有送出（未勾選）時為 false，送出 1、true 或 on 時為 true */
+	public boolean flag(String name) {
+		String value = first(name);
+		if (value == null) {
+			return false;
+		}
+		String text = value.trim();
+		return text.equals("1") || text.equals("true") || text.equals("on");
+	}
+
 	/**
 	 * @param options 可選的值，傳入列舉的 values()。不用 Enum.valueOf，瀏覽器端引擎才不需要反射
 	 */

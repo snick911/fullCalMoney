@@ -14,6 +14,10 @@
   const NEW_PERIOD_STEP = 12;
   const DEFAULT_PREPAYMENT = '100,000';
   const DEBOUNCE_MS = 200;
+  /** 與後端相同：房貸清單最多 120 筆、亂數種子最多 9 位數 */
+  const MAX_LIST_ROWS = 120;
+  const MAX_SEED = 999999999;
+  const FORM_STATE_VERSION = 1;
   const root = document.documentElement;
 
   /* ---------- 瀏覽器儲存：讀寫失敗時不影響畫面 ---------- */
@@ -35,15 +39,21 @@
     return numberFormats.get(digits);
   };
   const percentFormat = new Intl.NumberFormat('zh-TW', { style: 'percent', maximumFractionDigits: 2 });
+  const percentFixedFormat = new Intl.NumberFormat('zh-TW', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const wanFormat = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 4 });
+  const ratePercentFormat = new Intl.NumberFormat('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
   const fmt = {
     /** 不含貨幣符號，用於新台幣以外的金額 */
     amount: (n, digits = 2) => (n == null ? NO_VALUE : numberFormat(digits).format(n)),
     twd: (n, digits = 2) => (n == null ? NO_VALUE : (n < 0 ? '-$' : '$') + numberFormat(digits).format(Math.abs(n))),
     percent: (ratio) => (ratio == null ? NO_VALUE : percentFormat.format(ratio)),
+    /** 固定兩位小數 ex. 4.00%，用於平均年利率，避免剛好整數時看起來像沒算到小數 */
+    percentFixed: (ratio) => (ratio == null ? NO_VALUE : percentFixedFormat.format(ratio)),
     /** 銀行利率常到小數第三位 ex. 2.185% */
     rate: (percent) => (percent == null ? NO_VALUE : Number(percent).toFixed(3) + '%'),
+    /** 浮動利率取到 0.01%，輸入的區間有更多位數時最多顯示到小數第四位 */
+    floatRate: (percent) => (percent == null ? NO_VALUE : ratePercentFormat.format(percent) + '%'),
     term(periods) {
       const years = Math.floor(periods / MONTHS_PER_YEAR);
       const months = periods % MONTHS_PER_YEAR;
@@ -91,6 +101,52 @@
   const refreshHints = (scope) => $$('[data-kind]', scope).forEach(updateHint);
 
   const setOut = (scope, name, text) => $$(`[data-out="${name}"]`, scope).forEach((el) => { el.textContent = text; });
+
+  /*
+   * ---------- 保存試算條件 ----------
+   * 每次試算時把表單存到這台裝置的瀏覽器（localStorage，鍵為 fm.form.分頁），下次開啟時還原。
+   * localStorage 沒有到期日，不會像 cookie 一樣過期，也不會隨每個請求送到伺服器。
+   */
+  const formKey = (id) => `fm.form.${id}`;
+
+  function saveForm(id, form) {
+    const fields = [];
+    new FormData(form).forEach((value, name) => {
+      if (typeof value === 'string') fields.push([name, value]);
+    });
+    //沒勾選的勾選框不在 FormData 裡，另外記錄
+    const checks = {};
+    $$('input[type="checkbox"][name]', form).forEach((box) => { checks[box.name] = box.checked; });
+    store.set(formKey(id), JSON.stringify({ v: FORM_STATE_VERSION, savedAt: Date.now(), fields, checks }));
+  }
+
+  function loadForm(id) {
+    let state = null;
+    try { state = JSON.parse(store.get(formKey(id))); } catch (e) { return null; }
+    if (!state || state.v !== FORM_STATE_VERSION || !Array.isArray(state.fields)) return null;
+    state.fields = state.fields.filter((f) => Array.isArray(f) && typeof f[0] === 'string' && typeof f[1] === 'string');
+    return state;
+  }
+
+  const countField = (state, name) => state.fields.filter(([n]) => n === name).length;
+
+  /** 依保存的順序填回欄位，同名欄位（房貸清單）依序對應 */
+  function applyForm(form, state) {
+    const used = new Map();
+    state.fields.forEach(([name, value]) => {
+      const index = used.get(name) || 0;
+      used.set(name, index + 1);
+      const el = $$(`[name="${CSS.escape(name)}"]`, form)[index];
+      if (!el || el.type === 'checkbox') return;
+      if (el.tagName === 'SELECT' && !Array.from(el.options).some((o) => o.value === value)) return;
+      el.value = value;
+    });
+    Object.entries(state.checks || {}).forEach(([name, checked]) => {
+      const box = $(`input[type="checkbox"][name="${CSS.escape(name)}"]`, form);
+      if (box) box.checked = checked === true;
+    });
+    $$('[data-kind="money"]', form).forEach(formatMoneyInput);
+  }
 
   /* ---------- API ---------- */
   class ApiError extends Error {
@@ -153,20 +209,31 @@
 
   /* ---------- 試算頁共用：輸入後延遲重算，只採用最後一次的結果 ---------- */
   class Calculator {
-    constructor(id, { render, onReset }) {
+    /**
+     * @param beforeRun 每次試算前呼叫（保存與送出之前）
+     * @param beforeRestore 還原保存的條件前呼叫，可先建立清單列
+     * @param afterRestore 還原後呼叫，用來同步依欄位值顯示的區塊
+     */
+    constructor(id, { render, onReset, beforeRun, beforeRestore, afterRestore }) {
+      const noop = () => {};
+      this.id = id;
       this.section = $(`#page-${id}`);
       this.form = $('form', this.section);
       this.alert = $('.form-alert', this.form);
       this.results = $('[data-results]', this.section);
       this.endpoint = this.form.dataset.endpoint;
       this.renderResult = render;
-      this.onReset = onReset || (() => {});
+      this.onReset = onReset || noop;
+      this.beforeRun = beforeRun || noop;
+      this.beforeRestore = beforeRestore || noop;
+      this.afterRestore = afterRestore || noop;
       this.loaded = false;
       this.timer = 0;
       this.controller = null;
 
       this.form.addEventListener('input', (e) => { updateHint(e.target); this.schedule(); });
-      this.form.addEventListener('change', () => this.schedule());
+      //勾選框（金額不顯示小數）不必等打字結束，立即重算
+      this.form.addEventListener('change', (e) => (e.target.type === 'checkbox' ? this.run() : this.schedule()));
       this.form.addEventListener('submit', (e) => { e.preventDefault(); this.run(); });
       this.form.addEventListener('focusout', (e) => {
         if (e.target.matches('[data-kind="money"]')) formatMoneyInput(e.target);
@@ -184,6 +251,16 @@
       if (!this.loaded) this.run();
     }
 
+    /** 填回上次保存的條件，在第一次試算之前呼叫 */
+    restore() {
+      const state = loadForm(this.id);
+      if (!state) return;
+      this.beforeRestore(state);
+      applyForm(this.form, state);
+      this.afterRestore();
+      refreshHints(this.form);
+    }
+
     schedule() {
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this.run(), DEBOUNCE_MS);
@@ -194,6 +271,9 @@
       if (this.controller) this.controller.abort();
       const controller = new AbortController();
       this.controller = controller;
+      this.beforeRun();
+      //條件有誤也照樣保存，下次開啟時看到的是使用者最後輸入的內容
+      saveForm(this.id, this.form);
       this.results.setAttribute('aria-busy', 'true');
       try {
         const data = await callApi(this.endpoint, new URLSearchParams(new FormData(this.form)), controller.signal);
@@ -231,13 +311,50 @@
   }
 
   /* ---------- 複利試算 ---------- */
+  //d.decimals：金額的小數位數，勾選「金額不顯示小數」時後端已四捨五入到整數並回傳 0
   function renderCompound(d, scope) {
-    setOut(scope, 'totalBaseAmount', fmt.twd(d.totalBaseAmount));
-    setOut(scope, 'gains', fmt.twd(d.gains));
+    const twd = (n) => fmt.twd(n, d.decimals);
+    setOut(scope, 'totalBaseAmount', twd(d.totalBaseAmount));
+    setOut(scope, 'gains', twd(d.gains));
     setOut(scope, 'gainRate', fmt.percent(d.gainRate));
-    setOut(scope, 'totalSumAmount', fmt.twd(d.totalSumAmount));
+    setOut(scope, 'totalSumAmount', twd(d.totalSumAmount));
     $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
-      `<tr><td>${r[0]}</td><td>${fmt.twd(r[1])}</td><td>${fmt.twd(r[2])}</td><td>${fmt.twd(r[3])}</td><td>${fmt.twd(r[4])}</td></tr>`).join('');
+      `<tr><td>${r[0]}</td><td>${twd(r[1])}</td><td>${twd(r[2])}</td><td>${twd(r[3])}</td><td>${twd(r[4])}</td></tr>`).join('');
+  }
+
+  /* ---------- 複利試算（浮動） ---------- */
+  function renderFloating(d, scope) {
+    const twd = (n) => fmt.twd(n, d.decimals);
+    const down = (n) => (n < 0 ? ' class="is-down"' : '');
+    setOut(scope, 'totalBaseAmount', twd(d.totalBaseAmount));
+    setOut(scope, 'gains', twd(d.gains));
+    setOut(scope, 'gainRate', fmt.percent(d.gainRate));
+    setOut(scope, 'averageRate', fmt.percentFixed(d.averageRate));
+    setOut(scope, 'totalSumAmount', twd(d.totalSumAmount));
+    //第 1 年沒有額外增加投入，顯示「—」
+    $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
+      `<tr><td>${r[0]}</td><td${down(r[1])}>${fmt.floatRate(r[1])}</td><td>${r[0] === 1 ? NO_VALUE : twd(r[2])}</td>`
+      + `<td>${twd(r[3])}</td><td${down(r[4])}>${twd(r[4])}</td><td>${twd(r[5])}</td><td>${twd(r[6])}</td></tr>`).join('');
+  }
+
+  function initFloating() {
+    const seed = $('#page-floating input[name="seed"]');
+    const reseed = () => { seed.value = String(Math.floor(Math.random() * MAX_SEED)); };
+    const calculator = new Calculator('floating', {
+      render: renderFloating,
+      onReset: reseed,
+      //第一次開啟還沒有種子；還原時沿用保存的種子，看到的就是上次的結果
+      beforeRun: () => { if (!seed.value) reseed(); },
+    });
+    //條件改變就重新產生亂數；只切換「金額不顯示小數」時保留同一組結果
+    calculator.form.addEventListener('input', (e) => {
+      if (e.target.type !== 'checkbox') reseed();
+    });
+    $('[data-reroll]', calculator.form).addEventListener('click', () => {
+      reseed();
+      calculator.run();
+    });
+    return calculator;
   }
 
   /* ---------- 房貸計算 ---------- */
@@ -255,20 +372,25 @@
       badge.hidden = rows.children.length === 0;
     };
 
-    $('[data-add]', box).addEventListener('click', () => {
-      const last = rows.lastElementChild;
-      const lastPeriod = last ? parseNumber($('[data-kind="period"]', last).value) : FIRST_NEW_PERIOD - NEW_PERIOD_STEP;
-      const period = Math.min((Number.isInteger(lastPeriod) ? lastPeriod : 1) + NEW_PERIOD_STEP, MAX_PERIOD);
+    const createRow = () => {
       const row = template.content.firstElementChild.cloneNode(true);
       $$('label[data-for]', row).forEach((label) => {
         const input = $('input', label.closest('.field'));
         input.id = `${key}-${++rowSequence}`;
         label.htmlFor = input.id;
       });
+      rows.appendChild(row);
+      return row;
+    };
+
+    $('[data-add]', box).addEventListener('click', () => {
+      const last = rows.lastElementChild;
+      const lastPeriod = last ? parseNumber($('[data-kind="period"]', last).value) : FIRST_NEW_PERIOD - NEW_PERIOD_STEP;
+      const period = Math.min((Number.isInteger(lastPeriod) ? lastPeriod : 1) + NEW_PERIOD_STEP, MAX_PERIOD);
+      const row = createRow();
       const [periodInput, valueInput] = $$('input', row);
       periodInput.value = period;
       valueInput.value = defaultValue();
-      rows.appendChild(row);
       refreshHints(row);
       updateCount();
       periodInput.focus();
@@ -287,6 +409,13 @@
       clear() {
         rows.replaceChildren();
         updateCount();
+      },
+      /** 還原時先建立空白列，數值由 applyForm 依序填入；有資料就展開 */
+      restore(count) {
+        rows.replaceChildren();
+        for (let i = 0; i < Math.min(count, MAX_LIST_ROWS); i++) createRow();
+        updateCount();
+        if (count > 0) box.open = true;
       },
     };
   }
@@ -341,30 +470,31 @@
   function renderBond(d, scope) {
     scope.classList.toggle('is-domestic', !d.foreign);
     //債券幣別不一定是新台幣，不能一律加上 $ 符號
-    const money = d.foreign ? (n) => fmt.amount(n) : (n) => fmt.twd(n);
+    const twd = (n) => fmt.twd(n, d.decimals);
+    const money = d.foreign ? (n) => fmt.amount(n, d.decimals) : twd;
     setOut(scope, 'codeLabel', d.currency);
     setOut(scope, 'codeHead', `${d.currency} ${d.currencyLabel}`);
     setOut(scope, 'ytm', fmt.percent(d.yieldToMaturity));
     setOut(scope, 'bondAnnual', fmt.percent(d.bond.annualReturn));
     setOut(scope, 'homeAnnual', fmt.percent(d.home.annualReturn));
-    setOut(scope, 'exchangeGain', fmt.twd(d.exchangeGain));
+    setOut(scope, 'exchangeGain', twd(d.exchangeGain));
 
     $('tbody[data-summary-rows]', scope).innerHTML = BOND_SUMMARY.map(([key, label, kind]) => {
       const bond = kind === 'percent' ? fmt.percent(d.bond[key]) : money(d.bond[key]);
-      const home = kind === 'percent' ? fmt.percent(d.home[key]) : fmt.twd(d.home[key]);
+      const home = kind === 'percent' ? fmt.percent(d.home[key]) : twd(d.home[key]);
       return `<tr><th scope="row">${label}</th><td>${bond}</td><td data-foreign>${home}</td></tr>`;
     }).join('');
 
     setOut(scope, 'rowCount', `共 ${d.rows.length} 期`);
     $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
       `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${money(r[2])}</td><td${r[3] != null ? ' class="is-accent"' : ''}>${r[3] == null ? '' : money(r[3])}</td>`
-      + `<td>${fmt.twd(r[4])}</td><td${r[5] != null ? ' class="is-accent"' : ''}>${r[5] == null ? '' : fmt.twd(r[5])}</td>`
-      + `<td>${fmt.twd(r[6])}</td><td>${fmt.percent(r[7])}</td></tr>`).join('');
+      + `<td>${twd(r[4])}</td><td${r[5] != null ? ' class="is-accent"' : ''}>${r[5] == null ? '' : twd(r[5])}</td>`
+      + `<td>${twd(r[6])}</td><td>${fmt.percent(r[7])}</td></tr>`).join('');
   }
 
   /* ---------- 幣別轉換 ---------- */
   function renderCurrency(d, scope) {
-    setOut(scope, 'result', `${d.to} ${fmt.amount(d.result)}`);
+    setOut(scope, 'result', `${d.to} ${fmt.amount(d.result, d.decimals)}`);
     setOut(scope, 'crossRate', `1 ${d.from} = ${d.crossRate} ${d.to}`);
   }
 
@@ -434,12 +564,13 @@
     applyFont(root.dataset.font, false);
   }
 
-  /* ---------- 分頁切換：網址 #compound、#mortgage、#bond、#currency ---------- */
+  /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency；網址沒指定時回到上次的分頁 ---------- */
   const pages = {};
 
   function showPage() {
-    const requested = location.hash.slice(1);
+    const requested = location.hash.slice(1) || store.get('fm.page');
     const id = pages[requested] ? requested : 'compound';
+    store.set('fm.page', id);
     $$('.page').forEach((page) => { page.hidden = page.dataset.page !== id; });
     $$('.tab').forEach((tab) => {
       if (tab.dataset.page === id) {
@@ -471,14 +602,23 @@
     if (meta.version) $('[data-version]').textContent = `v${meta.version}`;
 
     pages.compound = new Calculator('compound', { render: renderCompound });
+    pages.floating = initFloating();
 
-    const mortgage = new Calculator('mortgage', { render: renderMortgage, onReset: () => { rateList.clear(); prepayList.clear(); } });
+    const mortgage = new Calculator('mortgage', {
+      render: renderMortgage,
+      onReset: () => { rateList.clear(); prepayList.clear(); },
+      beforeRestore: (state) => {
+        rateList.restore(countField(state, 'ratePeriod'));
+        prepayList.restore(countField(state, 'prepayPeriod'));
+      },
+    });
     const rateList = initPeriodList(mortgage, 'rate', 'tpl-rate-row', () => $('#m-rate').value);
     const prepayList = initPeriodList(mortgage, 'prepay', 'tpl-prepay-row', () => DEFAULT_PREPAYMENT);
     pages.mortgage = mortgage;
 
     pages.bond = initBond();
     pages.currency = initCurrency();
+    Object.values(pages).forEach((page) => page.restore());
 
     window.addEventListener('hashchange', () => {
       showPage();
@@ -502,7 +642,7 @@
     $$('[data-rate]', exchange).forEach((input) => { input.defaultValue = sampleRate(currency.value); });
     currency.addEventListener('change', () => sync(true));
     sync(false);
-    return new Calculator('bond', { render: renderBond, onReset: () => sync(false) });
+    return new Calculator('bond', { render: renderBond, onReset: () => sync(false), afterRestore: () => sync(false) });
   }
 
   function initCurrency() {
@@ -522,10 +662,8 @@
       select.addEventListener('change', () => sync(select, true));
       sync(select, false);
     });
-    const calculator = new Calculator('currency', {
-      render: renderCurrency,
-      onReset: () => { sync(from, false); sync(to, false); },
-    });
+    const syncBoth = () => { sync(from, false); sync(to, false); };
+    const calculator = new Calculator('currency', { render: renderCurrency, onReset: syncBoth, afterRestore: syncBoth });
     $('[data-swap]').addEventListener('click', () => {
       const fromRate = $('#x-from-rate');
       const toRate = $('#x-to-rate');
