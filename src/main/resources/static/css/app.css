@@ -391,14 +391,16 @@ select.input option { background: var(--surface); color: var(--fg); }
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 }
 .tile {
+  container-type: inline-size;
   display: flex; flex-direction: column; gap: .2rem; min-width: 0;
   padding: .85rem 1rem;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: var(--shadow);
 }
 .tile__label { color: var(--muted); font-size: .8125rem; font-weight: 700; }
+/* 卡片窄時數字跟著縮小，避免 $5,900,000.00 從中間斷行 */
 .tile__value {
-  font-size: 1.3rem; font-weight: 700; line-height: 1.3;
+  font-size: clamp(1rem, 12.5cqi, 1.3rem); font-weight: 700; line-height: 1.3;
   font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
 .tile--primary { background: var(--accent-soft); border-color: var(--accent); }

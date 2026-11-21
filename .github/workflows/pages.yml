@@ -1,0 +1,57 @@
+# 推送到 main 時：執行自我檢查，用 TeaVM 把 Java 試算程式編譯成 JavaScript，部署到 GitHub Pages
+# 第一次使用前，請到 Settings → Pages → Build and deployment → Source 選「GitHub Actions」
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只部署一次；進行中的部署不取消，避免網站停在半套狀態
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: 自我檢查（試算參考值與 API）
+        run: |
+          mkdir -p target/classes target/test-classes
+          javac --release 17 -encoding UTF-8 -d target/classes $(find src/main/java -name '*.java')
+          cp -r src/main/resources/. target/classes/
+          javac --release 17 -encoding UTF-8 -cp target/classes -d target/test-classes $(find src/test/java -name '*.java')
+          java -cp target/classes:target/test-classes com.fullmoney.CalculatorCheck
+
+      - name: 建置靜態網站（TeaVM 把 Java 試算程式編譯成 js/engine.js）
+        run: mvn -B -P pages clean process-classes
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: target/pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

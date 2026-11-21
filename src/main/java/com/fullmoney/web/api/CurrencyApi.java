@@ -7,7 +7,7 @@ import java.util.Map;
 
 import com.fullmoney.bean.CurrencyType;
 import com.fullmoney.service.CurrencyConverter;
-import com.fullmoney.web.ApiHandler;
+import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.Params;
 
 /**
@@ -15,7 +15,7 @@ import com.fullmoney.web.Params;
  *
  * <p>參數：amount 金額、from / to 幣別、fromRate / toRate 1 單位該幣別可換多少新台幣（新台幣固定為 1，不必送出）</p>
  */
-public final class CurrencyApi extends ApiHandler {
+public final class CurrencyApi extends ApiEndpoint {
 
 	private static final int CROSS_RATE_SCALE = 6;
 
@@ -28,8 +28,8 @@ public final class CurrencyApi extends ApiHandler {
 	@Override
 	protected Object respond(Params params) {
 		BigDecimal amount = params.decimal("amount", "金額", "0", Values.MAX_MONEY);
-		CurrencyType from = params.choice("from", "原幣別", CurrencyType.class);
-		CurrencyType to = params.choice("to", "目標幣別", CurrencyType.class);
+		CurrencyType from = params.choice("from", "原幣別", CurrencyType.values());
+		CurrencyType to = params.choice("to", "目標幣別", CurrencyType.values());
 		BigDecimal fromRate = rate(params, from, "fromRate");
 		BigDecimal toRate = rate(params, to, "toRate");
 

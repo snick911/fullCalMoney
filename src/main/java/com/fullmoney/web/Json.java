@@ -4,9 +4,11 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 /**
- * 最小的 JSON 輸出，只支援 API 用到的型別
+ * 最小的 JSON 輸出，只支援 API 用到的型別。瀏覽器端引擎也會用到，不可用 String.format
  */
 public final class Json {
+
+	private static final char[] HEX = "0123456789abcdef".toCharArray();
 
 	private Json() {
 	}
@@ -88,7 +90,10 @@ public final class Json {
 			case '&' -> out.append("\\u0026");
 			default -> {
 				if (c < 0x20 || c == ' ' || c == ' ') {
-					out.append(String.format("\\u%04x", (int) c));
+					out.append("\\u");
+					for (int shift = 12; shift >= 0; shift -= 4) {
+						out.append(HEX[(c >> shift) & 0xF]);
+					}
 				} else {
 					out.append(c);
 				}

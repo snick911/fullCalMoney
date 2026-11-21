@@ -13,7 +13,7 @@ import com.fullmoney.bean.BondReturn;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
 import com.fullmoney.service.BondCalculator;
-import com.fullmoney.web.ApiHandler;
+import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.Params;
 
 /**
@@ -24,7 +24,7 @@ import com.fullmoney.web.Params;
  * buyExchangeRate / couponExchangeRate / redemptionExchangeRate 匯率（新台幣固定為 1，不必送出）</p>
  * <p>rows 每列為 [期數, 年度, 配息(原幣), 本金(原幣), 配息(台幣), 本金(台幣), 累計收回(台幣), 累計報酬率]</p>
  */
-public final class BondApi extends ApiHandler {
+public final class BondApi extends ApiEndpoint {
 
 	private static final int MAX_YEAR = 50;
 
@@ -36,12 +36,12 @@ public final class BondApi extends ApiHandler {
 
 	@Override
 	protected Object respond(Params params) {
-		CurrencyType currency = params.choice("currency", "幣別", CurrencyType.class);
+		CurrencyType currency = params.choice("currency", "幣別", CurrencyType.values());
 		BigDecimal faceValue = params.decimal("faceValue", "面額", "0", Values.MAX_MONEY);
 		BigDecimal buyPrice = params.decimal("buyPrice", "買入價格", "0.01", "1000");
 		BigDecimal redemptionPrice = params.decimal("redemptionPrice", "到期價格", "0", "1000");
 		BigDecimal couponRate = params.decimal("couponRate", "票面利率", "0", "100");
-		CouponFrequency frequency = params.choice("frequency", "配息頻率", CouponFrequency.class);
+		CouponFrequency frequency = params.choice("frequency", "配息頻率", CouponFrequency.values());
 		int years = params.integer("years", "年期", 1, MAX_YEAR);
 		BigDecimal feeRate = params.decimal("feeRate", "手續費", "0", "100");
 		BigDecimal taxRate = params.decimal("taxRate", "配息稅率", "0", "100");

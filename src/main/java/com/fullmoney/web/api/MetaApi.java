@@ -10,13 +10,13 @@ import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
 import com.fullmoney.bean.PrepaymentMode;
 import com.fullmoney.bean.RepaymentMethod;
-import com.fullmoney.web.ApiHandler;
+import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.Params;
 
 /**
  * 網頁下拉選單的選項與版本號，選項只定義在 bean 的列舉，網頁不重複寫死
  */
-public final class MetaApi extends ApiHandler {
+public final class MetaApi extends ApiEndpoint {
 
 	private final Map<String, Object> meta = buildMeta();
 

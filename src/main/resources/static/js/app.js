@@ -117,6 +117,33 @@
     return data;
   }
 
+  /*
+   * GitHub Pages 沒有伺服器：改用 TeaVM 由 Java 試算程式編譯的引擎 js/engine.js，
+   * 回傳格式與伺服器 API 相同。伺服器版的 engine.js 只是空殼，仍呼叫 /api/...
+   */
+  let engineCall = null;
+
+  async function loadEngine() {
+    try {
+      const engine = await import('./engine.js');
+      if (typeof engine.call === 'function') engineCall = engine.call;
+    } catch (e) {
+      /* 載入失敗時改呼叫伺服器 */
+    }
+  }
+
+  async function callApi(path, params, signal) {
+    if (!engineCall) return postForm(path, params, signal);
+    let envelope;
+    try {
+      envelope = JSON.parse(engineCall(path, params.toString()));
+    } catch (e) {
+      throw new ApiError('試算時發生錯誤，請重新整理頁面後再試。');
+    }
+    if (envelope.status !== 200) throw new ApiError(envelope.body.error, envelope.body.field);
+    return envelope.body;
+  }
+
   /** 錯誤欄位名稱，清單欄位為「名稱:索引」 */
   function fieldElement(form, field) {
     if (!field) return null;
@@ -169,7 +196,7 @@
       this.controller = controller;
       this.results.setAttribute('aria-busy', 'true');
       try {
-        const data = await postForm(this.endpoint, new URLSearchParams(new FormData(this.form)), controller.signal);
+        const data = await callApi(this.endpoint, new URLSearchParams(new FormData(this.form)), controller.signal);
         if (this.controller !== controller) return;
         this.showError(null);
         this.renderResult(data, this.section);
@@ -429,15 +456,14 @@
   /* ---------- 啟動 ---------- */
   async function start() {
     initSettings();
+    await loadEngine();
 
     let meta = {};
     try {
-      const response = await fetch('/api/meta', { headers: { Accept: 'application/json' } });
-      if (!response.ok) throw new Error(String(response.status));
-      meta = await response.json();
+      meta = await callApi('/api/meta', new URLSearchParams());
     } catch (e) {
       $$('.form-alert').forEach((alert) => {
-        alert.textContent = '無法載入選項，請確認網站仍在執行後重新整理頁面。';
+        alert.textContent = '無法載入選項，請重新整理頁面。';
         alert.hidden = false;
       });
     }

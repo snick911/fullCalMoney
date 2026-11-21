@@ -3,13 +3,10 @@ package com.fullmoney.web;
 import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.text.NumberFormat;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -22,6 +19,7 @@ import java.util.regex.Pattern;
 public final class Params {
 
 	private static final int MAX_PAIRS = 2000;
+	private static final int MAX_FRACTION_DIGITS_IN_MESSAGE = 4;
 	private static final Pattern DECIMAL = Pattern.compile("-?\\d{1,13}(\\.\\d{1,8})?");
 	private static final Pattern INTEGER = Pattern.compile("-?\\d{1,9}");
 
@@ -72,22 +70,27 @@ public final class Params {
 		return toInteger(first(name), name, label, min, max);
 	}
 
-	public <E extends Enum<E>> E choice(String name, String label, Class<E> type) {
+	/**
+	 * @param options 可選的值，傳入列舉的 values()。不用 Enum.valueOf，瀏覽器端引擎才不需要反射
+	 */
+	public <E extends Enum<E>> E choice(String name, String label, E[] options) {
 		String value = first(name);
 		if (value == null || value.isBlank()) {
 			throw new BadRequestException(name, "請選擇" + label + "。");
 		}
-		try {
-			return Enum.valueOf(type, value.trim());
-		} catch (IllegalArgumentException e) {
-			throw new BadRequestException(name, label + "的選項不正確。");
+		String code = value.trim();
+		for (E option : options) {
+			if (option.name().equals(code)) {
+				return option;
+			}
 		}
+		throw new BadRequestException(name, label + "的選項不正確。");
 	}
 
 	/** 沒有送出此參數時用預設值，有送出但不正確時仍視為錯誤 */
-	public <E extends Enum<E>> E choice(String name, String label, Class<E> type, E fallback) {
+	public <E extends Enum<E>> E choice(String name, String label, E[] options, E fallback) {
 		String value = first(name);
-		return value == null || value.isBlank() ? fallback : choice(name, label, type);
+		return value == null || value.isBlank() ? fallback : choice(name, label, options);
 	}
 
 	public static BigDecimal toDecimal(String raw, String field, String label, BigDecimal min, BigDecimal max) {
@@ -125,17 +128,26 @@ public final class Params {
 		return list == null || list.isEmpty() ? null : list.get(0);
 	}
 
-	/** 全形數字轉半形，去掉千分位與空白 */
+	/** 全形英數轉半形，去掉千分位逗號、底線與空白 */
 	private static String normalize(String raw) {
 		if (raw == null) {
 			return "";
 		}
-		return Normalizer.normalize(raw, Normalizer.Form.NFKC).replace(",", "").replace("_", "").strip().replace(" ", "");
+		StringBuilder out = new StringBuilder(raw.length());
+		for (int i = 0; i < raw.length(); i++) {
+			char c = raw.charAt(i);
+			if (c >= '！' && c <= '～') {
+				c = (char) (c - 0xFEE0);
+			}
+			if (c == ',' || c == '_' || c == '　' || c == ' ' || Character.isWhitespace(c)) {
+				continue;
+			}
+			out.append(c);
+		}
+		return out.toString();
 	}
 
 	private static String format(BigDecimal value) {
-		NumberFormat format = NumberFormat.getNumberInstance(Locale.TAIWAN);
-		format.setMaximumFractionDigits(4);
-		return format.format(value);
+		return Numbers.group(value, MAX_FRACTION_DIGITS_IN_MESSAGE);
 	}
 }

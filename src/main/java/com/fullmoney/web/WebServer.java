@@ -6,11 +6,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.fullmoney.web.api.BondApi;
-import com.fullmoney.web.api.CompoundApi;
-import com.fullmoney.web.api.CurrencyApi;
-import com.fullmoney.web.api.MetaApi;
-import com.fullmoney.web.api.MortgageApi;
+import com.fullmoney.web.api.ApiEndpoints;
 import com.sun.net.httpserver.HttpServer;
 
 /**
@@ -30,11 +26,9 @@ public final class WebServer {
 
 	public static WebServer start(InetSocketAddress address) throws IOException {
 		HttpServer server = HttpServer.create(address, 0);
-		register(server, new MetaApi());
-		register(server, new CompoundApi());
-		register(server, new MortgageApi());
-		register(server, new BondApi());
-		register(server, new CurrencyApi());
+		for (ApiEndpoint endpoint : ApiEndpoints.all()) {
+			server.createContext(endpoint.getPath(), new ApiHandler(endpoint));
+		}
 		server.createContext("/", new StaticHandler("/static"));
 
 		AtomicInteger threadCount = new AtomicInteger();
@@ -46,10 +40,6 @@ public final class WebServer {
 		server.setExecutor(executor);
 		server.start();
 		return new WebServer(server, executor);
-	}
-
-	private static void register(HttpServer server, ApiHandler handler) {
-		server.createContext(handler.getPath(), handler);
 	}
 
 	public int getPort() {

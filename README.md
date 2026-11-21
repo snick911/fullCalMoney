@@ -3,6 +3,15 @@
 以 **Java 17** 開發的響應式（RWD）理財試算網站，手機、平板、電腦都能使用。
 計算邏輯沿用桌面版 FullMoney 1.4.0 的 `service` 與 `bean`（未修改公式），**不含大樂透分析**。
 
+**線上版（GitHub Pages）：<https://snick911.github.io/fullCalMoney/>**
+
+同一份程式有兩種執行方式：
+
+| 方式 | 計算在哪裡 | 用途 |
+| --- | --- | --- |
+| Java 伺服器（`run.bat`） | Java 後端，網頁呼叫 `/api/...` | 本機使用、自行架站 |
+| GitHub Pages 靜態網站 | 瀏覽器，由 TeaVM 把同一份 Java 試算程式編譯成 `js/engine.js` | 免費公開網址，不需要伺服器 |
+
 ## 功能
 
 | 分頁 | 內容 |
@@ -26,7 +35,7 @@
 | --- | --- |
 | JDK | 17 以上 |
 | 相依套件 | 無，使用 JDK 內建的 `com.sun.net.httpserver` |
-| 建置工具 | 不需要；附 `pom.xml` 供 IDE 匯入或已安裝 Maven 時使用 |
+| 建置工具 | 伺服器版不需要；`pom.xml` 可用 Maven 3.9 建置，GitHub Pages 版需要 Maven（下載 TeaVM） |
 | 編碼 | UTF-8 |
 
 ## 快速開始
@@ -68,11 +77,14 @@ $env:HOST = '0.0.0.0'; java -jar target\fullcalmoney.jar
 cmd /c test.bat
 ```
 
-`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 35 項，全部通過時結束代碼為 0：
+`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 42 項，全部通過時結束代碼為 0：
 
 - 試算結果與桌面版文件記載的數值相同（見下方「計算參考值」）。
 - 輸入檢查：拒絕科學記號、超出範圍、位數過多；接受千分位與全形數字。
+- 伺服器與瀏覽器端引擎共用的 `ApiEndpoint.execute`：正常結果、錯誤欄位、千分位格式。
 - 實際啟動伺服器呼叫 API：正常結果、錯誤欄位、未知路徑、路徑穿越與 `.class` 檔都回 404。
+
+GitHub Actions 每次部署前也會先執行這些檢查，失敗就不會部署。
 
 ## 專案結構
 
@@ -83,23 +95,49 @@ src/main/java/com/fullmoney/
 ├─ bean/                    沿用桌面版：複利、房貸、債券的條件與結果
 ├─ service/                 沿用桌面版：MoneyCalculator、MortgageCalculator、BondCalculator、CurrencyConverter
 └─ web/
+   ├─ ApiEndpoint.java      一個 API：參數 → 結果，不依賴 HttpServer，伺服器與瀏覽器端引擎共用
+   ├─ ApiHandler.java       把 ApiEndpoint 接到 HttpServer：路徑、請求方式、錯誤紀錄
    ├─ WebServer.java        建立 HttpServer、註冊路徑
-   ├─ ApiHandler.java       API 共用流程：解析參數、輸出 JSON、錯誤處理
    ├─ Params.java           表單參數解析與範圍檢查
-   ├─ Json.java             最小 JSON 輸出
+   ├─ Json.java / Numbers.java   最小 JSON 輸出、千分位格式
    ├─ StaticHandler.java    從 classpath 提供網頁檔（副檔名白名單、ETag）
    ├─ Http.java             回應標頭（CSP 等安全標頭）、gzip
-   └─ api/                  CompoundApi、MortgageApi、BondApi、CurrencyApi、MetaApi
+   └─ api/                  ApiEndpoints（清單）、CompoundApi、MortgageApi、BondApi、CurrencyApi、MetaApi
 src/main/resources/static/
 ├─ index.html               四個分頁的版面
 ├─ css/app.css              主題色系、字體大小、RWD
 ├─ js/boot.js               畫面繪製前套用主題與字體，避免閃爍
-└─ js/app.js                即時重算、外觀設定、分頁切換
-src/test/java/com/fullmoney/CalculatorCheck.java   自我檢查
-build.bat / run.bat / test.bat                     不需 Maven 的建置、啟動、檢查
+├─ js/app.js                即時重算、外觀設定、分頁切換
+└─ js/engine.js             伺服器版的空殼；Pages 建置時換成 TeaVM 編譯的試算引擎
+src/pages/java/com/fullmoney/pages/BrowserEngine.java   Pages 版的瀏覽器端引擎（只在 Maven pages 設定檔編譯）
+src/test/java/com/fullmoney/CalculatorCheck.java         自我檢查
+.github/workflows/pages.yml                              推送到 main 時自動部署 GitHub Pages
+build.bat / run.bat / test.bat                           不需 Maven 的建置、啟動、檢查
 ```
 
 分層原則與桌面版相同：`service`、`bean` 不知道網頁的存在，`web` 只負責轉換輸入與輸出。
+
+`ApiEndpoint` 與它呼叫到的類別（`web.api`、`Params`、`Json`、`Numbers`、`service`、`bean`）也會被編譯成 JavaScript，只能使用 TeaVM 支援的 Java 類別：不要用 `java.text`（`NumberFormat`、`Normalizer`）、`String.format`、`Locale` 與反射（例如 `Enum.valueOf`）。不確定時執行一次 Pages 建置，不支援的類別會在編譯時報錯。
+
+## GitHub Pages
+
+推送到 `main` 後，GitHub Actions（`.github/workflows/pages.yml`）會：
+
+1. 執行自我檢查。
+2. `mvn -P pages clean process-classes`：TeaVM 把 `BrowserEngine` 與試算程式編譯成 ES 模組 `target/pages/js/engine.js`，並複製網頁檔到 `target/pages`。
+3. 部署到 <https://snick911.github.io/fullCalMoney/>。
+
+網頁載入時用 `import('./engine.js')` 取得引擎：Pages 版有 `call` 函式就在瀏覽器計算；伺服器版的 `engine.js` 是空殼，改呼叫 `/api/...`。兩者的輸入與結果格式完全相同。
+
+本機產生靜態網站（需要 Maven 3.9 以上）：
+
+```powershell
+mvn -P pages clean process-classes
+```
+
+`target/pages` 必須透過網頁伺服器開啟，直接雙擊 `index.html`（`file://`）時瀏覽器不允許載入 JavaScript 模組。
+
+第一次部署前要在 GitHub 專案的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。
 
 ## API
 
@@ -156,4 +194,4 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 - 沒有帳號，也不保存試算條件，重新整理後回到預設值（外觀設定會保存）。
 - 內建 HttpServer 適合個人或內部使用；對外公開時建議放在 Nginx、IIS 等反向代理之後並啟用 HTTPS。
 - 網站執行中無法重新建置（jar 檔被占用），請先 `Ctrl+C` 停止。
-- `pom.xml` 未以 Maven 實際建置驗證（開發環境沒有安裝 Maven）；`build.bat`、`test.bat` 已驗證。
+- GitHub Pages 版第一次開啟要多下載約 240 KB 的試算引擎（壓縮傳輸後較小）。

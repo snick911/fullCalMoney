@@ -24,10 +24,14 @@ import com.fullmoney.service.BondCalculator;
 import com.fullmoney.service.CurrencyConverter;
 import com.fullmoney.service.MoneyCalculator;
 import com.fullmoney.service.MortgageCalculator;
+import com.fullmoney.web.ApiEndpoint;
+import com.fullmoney.web.ApiResponse;
 import com.fullmoney.web.BadRequestException;
 import com.fullmoney.web.Json;
+import com.fullmoney.web.Numbers;
 import com.fullmoney.web.Params;
 import com.fullmoney.web.WebServer;
+import com.fullmoney.web.api.ApiEndpoints;
 
 /**
  * 不依賴測試框架的自我檢查：試算結果須與桌面版文件記載的數值相同，並實際呼叫一次 HTTP API
@@ -49,6 +53,7 @@ public final class CalculatorCheck {
 		currency();
 		params();
 		json();
+		endpoints();
 		http();
 		System.out.println();
 		System.out.println(failures == 0 ? "ALL " + checks + " CHECKS PASSED" : failures + " OF " + checks + " CHECKS FAILED");
@@ -125,6 +130,20 @@ public final class CalculatorCheck {
 		value.put("a", "x\"</script>");
 		value.put("b", new Object[] { 1, null, new BigDecimal("2.50") });
 		check("json escaping", "{\"a\":\"x\\\"\\u003c/script\\u003e\",\"b\":[1,null,2.50]}", Json.write(value));
+	}
+
+	/** 瀏覽器端引擎（GitHub Pages）與伺服器共用的路徑 */
+	private static void endpoints() {
+		ApiEndpoint mortgage = ApiEndpoints.all().stream().filter(e -> e.getPath().equals("/api/mortgage")).findFirst().orElseThrow();
+		ApiResponse ok = mortgage.execute("loanAmount=10%2C000%2C000&rate=2.2&years=30&graceYears=0&method=EQUAL_PAYMENT");
+		check("endpoint status", "200", String.valueOf(ok.getStatus()));
+		check("endpoint payment", true, Json.write(ok.getBody()).contains("\"firstPayment\":37970"));
+		ApiResponse bad = mortgage.execute("loanAmount=1&rate=2.2&years=30&graceYears=0&method=NOPE");
+		check("endpoint bad choice", "400", String.valueOf(bad.getStatus()));
+		check("endpoint bad choice field", true, Json.write(bad.getBody()).contains("\"field\":\"method\""));
+		check("numbers group negative", "-1,234,567.5", Numbers.group(new BigDecimal("-1234567.50"), 2));
+		check("numbers group small", "0.0001", Numbers.group(new BigDecimal("0.0001"), 4));
+		check("numbers group billion", "1,000,000,000", Numbers.group(new BigDecimal("1000000000"), 4));
 	}
 
 	private static void http() throws Exception {

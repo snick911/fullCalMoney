@@ -9,7 +9,7 @@ import java.util.Map;
 import com.fullmoney.bean.SaveMoney;
 import com.fullmoney.bean.SaveMoneyResult;
 import com.fullmoney.service.MoneyCalculator;
-import com.fullmoney.web.ApiHandler;
+import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.Params;
 
 /**
@@ -18,7 +18,7 @@ import com.fullmoney.web.Params;
  * <p>參數：baseAmount 第一年投入本金、rate 年利率(%)、addAmount 每年投入增加金額、years 總年數</p>
  * <p>rows 每列為 [年度, 本金加入, 本年利息, 純本金部位, 累積財富]</p>
  */
-public final class CompoundApi extends ApiHandler {
+public final class CompoundApi extends ApiEndpoint {
 
 	private final MoneyCalculator calculator = new MoneyCalculator();
 

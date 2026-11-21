@@ -1,12 +1,10 @@
 package com.fullmoney.web.api;
 
 import java.math.BigDecimal;
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiFunction;
 
@@ -17,8 +15,9 @@ import com.fullmoney.bean.MortgageResult;
 import com.fullmoney.bean.PrepaymentMode;
 import com.fullmoney.bean.RepaymentMethod;
 import com.fullmoney.service.MortgageCalculator;
-import com.fullmoney.web.ApiHandler;
+import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.BadRequestException;
+import com.fullmoney.web.Numbers;
 import com.fullmoney.web.Params;
 
 /**
@@ -29,7 +28,7 @@ import com.fullmoney.web.Params;
  * 分段利率以 ratePeriod 與 rateValue(%) 成對重複送出，提前還款以 prepayPeriod 與 prepayAmount 成對重複送出。</p>
  * <p>rows 每列為 [期數, 年度, 年利率(%), 月付金, 償還本金, 償還利息, 提前還款, 剩餘本金]</p>
  */
-public final class MortgageApi extends ApiHandler {
+public final class MortgageApi extends ApiEndpoint {
 
 	private static final int MONTHS_PER_YEAR = 12;
 	private static final int MAX_YEAR = 50;
@@ -49,8 +48,8 @@ public final class MortgageApi extends ApiHandler {
 		BigDecimal rate = params.decimal("rate", "年利率", "0", "100");
 		int years = params.integer("years", "貸款年限", 1, MAX_YEAR);
 		int graceYears = params.integer("graceYears", "寬限期", 0, MAX_GRACE_YEAR);
-		RepaymentMethod method = params.choice("method", "還款方式", RepaymentMethod.class);
-		PrepaymentMode mode = params.choice("prepaymentMode", "提前還款後的方式", PrepaymentMode.class, PrepaymentMode.SHORTEN_TERM);
+		RepaymentMethod method = params.choice("method", "還款方式", RepaymentMethod.values());
+		PrepaymentMode mode = params.choice("prepaymentMode", "提前還款後的方式", PrepaymentMode.values(), PrepaymentMode.SHORTEN_TERM);
 		List<MortgageRateChange> rateChanges = entries(params, "ratePeriod", "rateValue", "分段利率", "起始期數", "年利率", "0", "100",
 				(period, value) -> new MortgageRateChange(period, value.movePointLeft(2)));
 		List<MortgagePrepayment> prepayments = entries(params, "prepayPeriod", "prepayAmount", "提前還款", "期數", "金額", "0", Values.MAX_MONEY,
@@ -126,8 +125,6 @@ public final class MortgageApi extends ApiHandler {
 	}
 
 	private static String dollars(BigDecimal amount) {
-		NumberFormat format = NumberFormat.getNumberInstance(Locale.TAIWAN);
-		format.setMaximumFractionDigits(2);
-		return "$" + format.format(amount);
+		return "$" + Numbers.group(amount, 2);
 	}
 }
