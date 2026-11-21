@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="zh-Hant-TW" data-theme="light" data-font="m">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FullMoney 理財試算</title>
+<meta name="description" content="複利試算、房貸計算、債券報酬與幣別轉換，支援手機與電腦瀏覽。">
+<meta name="theme-color" content="#F2F3F5">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script src="js/boot.js"></script>
+<script src="js/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主要內容</a>
+
+<header class="site-header">
+  <div class="topbar container">
+    <a class="brand" href="#compound" aria-label="FullMoney 理財試算 首頁">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" class="brand__tile"/>
+        <path d="M7 22.5l6-6.5 4.5 4 7.5-9" class="brand__line"/>
+        <path d="M19.5 11h5.5v5.5" class="brand__line"/>
+      </svg>
+      <span class="brand__name">FullMoney</span>
+      <span class="brand__sub">理財試算</span>
+    </a>
+    <button type="button" class="settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="settingsPanel" aria-label="外觀設定：主題色系與字體大小">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icon">
+        <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z"/>
+        <circle cx="7.5" cy="11.5" r="1.3"/><circle cx="10.5" cy="7.5" r="1.3"/><circle cx="15" cy="7.5" r="1.3"/>
+      </svg>
+      <span class="settings-toggle__text">外觀設定</span>
+    </button>
+  </div>
+
+  <nav class="tabs" aria-label="試算項目">
+    <div class="tabs__inner container">
+      <a class="tab" href="#compound" data-page="compound">複利試算</a>
+      <a class="tab" href="#mortgage" data-page="mortgage">房貸計算</a>
+      <a class="tab" href="#bond" data-page="bond">債券計算</a>
+      <a class="tab" href="#currency" data-page="currency">幣別轉換</a>
+    </div>
+  </nav>
+
+  <div class="settings" id="settingsPanel" hidden>
+    <div class="settings__inner container">
+    <div class="settings__card" role="dialog" aria-label="外觀設定">
+      <fieldset class="settings__group">
+        <legend>主題色系</legend>
+        <div class="theme-grid">
+          <label class="theme-option"><input type="radio" name="theme" value="light"><span class="swatch swatch--light" aria-hidden="true"></span><span>淺色</span></label>
+          <label class="theme-option"><input type="radio" name="theme" value="eye-dark"><span class="swatch swatch--eye-dark" aria-hidden="true"></span><span>護眼暗色</span></label>
+          <label class="theme-option"><input type="radio" name="theme" value="dark"><span class="swatch swatch--dark" aria-hidden="true"></span><span>深色</span></label>
+          <label class="theme-option"><input type="radio" name="theme" value="sepia"><span class="swatch swatch--sepia" aria-hidden="true"></span><span>護眼米黃</span></label>
+          <label class="theme-option"><input type="radio" name="theme" value="ocean"><span class="swatch swatch--ocean" aria-hidden="true"></span><span>海洋藍</span></label>
+          <label class="theme-option"><input type="radio" name="theme" value="sakura"><span class="swatch swatch--sakura" aria-hidden="true"></span><span>櫻花粉</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="settings__group">
+        <legend>字體大小</legend>
+        <div class="segmented">
+          <label><input type="radio" name="font" value="s"><span class="segmented__s">小</span></label>
+          <label><input type="radio" name="font" value="m"><span class="segmented__m">中</span></label>
+          <label><input type="radio" name="font" value="l"><span class="segmented__l">大</span></label>
+          <label><input type="radio" name="font" value="xl"><span class="segmented__xl">特大</span></label>
+        </div>
+      </fieldset>
+      <p class="settings__note">設定會保存在這台裝置的瀏覽器。</p>
+    </div>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="container main" tabindex="-1">
+
+  <!-- 複利試算 -->
+  <section class="page" id="page-compound" data-page="compound" aria-labelledby="h-compound">
+    <div class="page__head">
+      <h1 id="h-compound">複利試算</h1>
+      <p class="page__desc">每年年初投入本金、年底依利率計息，試算逐年累積的財富。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/compound">
+      <div class="card__head">
+        <h2>試算條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="c-base">第一年投入本金</label>
+          <div class="input-wrap"><input class="input" id="c-base" name="baseAmount" data-kind="money" inputmode="numeric" value="200,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="c-rate">期望年利率</label>
+          <div class="input-wrap"><input class="input" id="c-rate" name="rate" inputmode="decimal" value="4"><span class="input-affix">%</span></div>
+        </div>
+        <div class="field">
+          <label for="c-add">每年投入額外增加</label>
+          <div class="input-wrap"><input class="input" id="c-add" name="addAmount" data-kind="money" inputmode="numeric" value="10,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="c-years">總年數</label>
+          <div class="input-wrap"><input class="input" id="c-years" name="years" inputmode="numeric" value="20"><span class="input-affix">年</span></div>
+        </div>
+      </div>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">投入金額</span><span class="tile__value" data-out="totalBaseAmount">—</span></div>
+        <div class="tile"><span class="tile__label">獲利金額</span><span class="tile__value" data-out="gains">—</span></div>
+        <div class="tile"><span class="tile__label">投資報酬率</span><span class="tile__value" data-out="gainRate">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label">累積財富</span><span class="tile__value" data-out="totalSumAmount">—</span></div>
+      </div>
+      <div class="card card--flush">
+        <div class="card__head"><h2>逐年明細</h2></div>
+        <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
+          <table class="data-table">
+            <thead><tr><th scope="col">年度</th><th scope="col">本金加入</th><th scope="col">本年利息</th><th scope="col">純本金部位</th><th scope="col">累積財富</th></tr></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 房貸計算 -->
+  <section class="page" id="page-mortgage" data-page="mortgage" aria-labelledby="h-mortgage" hidden>
+    <div class="page__head">
+      <h1 id="h-mortgage">房貸計算</h1>
+      <p class="page__desc">依貸款金額、利率、年限、寬限期與還款方式試算每期還款，可加入分段利率與提前還款。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/mortgage">
+      <div class="card__head">
+        <h2>試算條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="m-amount">貸款金額</label>
+          <div class="input-wrap"><input class="input" id="m-amount" name="loanAmount" data-kind="money" inputmode="numeric" value="10,000,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="m-rate">年利率</label>
+          <div class="input-wrap"><input class="input" id="m-rate" name="rate" inputmode="decimal" value="2.2"><span class="input-affix">%</span></div>
+        </div>
+        <div class="field">
+          <label for="m-years">貸款年限</label>
+          <div class="input-wrap"><input class="input" id="m-years" name="years" inputmode="numeric" value="30"><span class="input-affix">年</span></div>
+        </div>
+        <div class="field">
+          <label for="m-grace">寬限期</label>
+          <div class="input-wrap"><input class="input" id="m-grace" name="graceYears" inputmode="numeric" value="0"><span class="input-affix">年</span></div>
+        </div>
+        <div class="field">
+          <label for="m-method">還款方式</label>
+          <select class="input" id="m-method" name="method" data-options="repaymentMethods"></select>
+        </div>
+      </div>
+
+      <div class="advanced">
+        <details class="sublist" data-list="rate">
+          <summary><span>分段利率</span><span class="badge" data-count hidden></span></summary>
+          <div class="sublist__body">
+            <p class="sublist__desc">從起始期數起改用新利率並重算月付，之前的期數用上方的年利率。第 13 期是第 2 年第 1 個月。</p>
+            <div class="sublist__rows" data-rows></div>
+            <button type="button" class="btn btn--outline" data-add>
+              <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新增分段
+            </button>
+          </div>
+        </details>
+        <details class="sublist" data-list="prepay">
+          <summary><span>提前還款</span><span class="badge" data-count hidden></span></summary>
+          <div class="sublist__body">
+            <p class="sublist__desc">在該期正常繳款後多還本金，下一期起利息減少。未計入提前還款違約金。</p>
+            <div class="field field--inline">
+              <label for="m-mode">提前還款後</label>
+              <select class="input" id="m-mode" name="prepaymentMode" data-options="prepaymentModes"></select>
+            </div>
+            <div class="sublist__rows" data-rows></div>
+            <button type="button" class="btn btn--outline" data-add>
+              <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新增提前還款
+            </button>
+          </div>
+        </details>
+      </div>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">寬限期月付</span><span class="tile__value" data-out="gracePayment">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label">攤還首期月付</span><span class="tile__value" data-out="firstPayment">—</span></div>
+        <div class="tile"><span class="tile__label">利息總額</span><span class="tile__value" data-out="totalInterest">—</span></div>
+        <div class="tile"><span class="tile__label">本息總額</span><span class="tile__value" data-out="totalPayment">—</span></div>
+      </div>
+      <div class="tiles tiles--secondary" data-prepay-summary hidden>
+        <div class="tile"><span class="tile__label">還款期間</span><span class="tile__value" data-out="term">—</span></div>
+        <div class="tile"><span class="tile__label">提前還款總額</span><span class="tile__value" data-out="prepaid">—</span></div>
+        <div class="tile"><span class="tile__label">省下利息</span><span class="tile__value" data-out="savedInterest">—</span></div>
+        <div class="tile"><span class="tile__label">提早還清</span><span class="tile__value" data-out="earlier">—</span></div>
+      </div>
+      <p class="note" data-note data-default="每期金額四捨五入到元，尾差由最後一期吸收。試算僅供參考，實際金額以銀行核貸為準。">每期金額四捨五入到元，尾差由最後一期吸收。試算僅供參考，實際金額以銀行核貸為準。</p>
+      <div class="card card--flush">
+        <div class="card__head">
+          <h2>攤還明細</h2>
+          <span class="card__meta" data-out="rowCount"></span>
+        </div>
+        <div class="table-wrap" tabindex="0" aria-label="攤還明細，可捲動">
+          <table class="data-table">
+            <thead><tr><th scope="col">期數</th><th scope="col">年度</th><th scope="col">年利率</th><th scope="col">月付金</th><th scope="col">償還本金</th><th scope="col">償還利息</th><th scope="col">提前還款</th><th scope="col">剩餘本金</th></tr></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 債券計算 -->
+  <section class="page" id="page-bond" data-page="bond" aria-labelledby="h-bond" hidden>
+    <div class="page__head">
+      <h1 id="h-bond">債券計算</h1>
+      <p class="page__desc">試算持有到期的配息與報酬率，外幣債券可依匯率換算回新台幣。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/bond">
+      <div class="card__head">
+        <h2>試算條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="b-currency">幣別</label>
+          <select class="input" id="b-currency" name="currency" data-options="currencies" data-default="USD"></select>
+        </div>
+        <div class="field">
+          <label for="b-face">面額</label>
+          <input class="input" id="b-face" name="faceValue" data-kind="money" inputmode="numeric" value="10,000">
+        </div>
+        <div class="field">
+          <label for="b-buy">買入價格</label>
+          <div class="input-wrap"><input class="input" id="b-buy" name="buyPrice" inputmode="decimal" value="98.5"><span class="input-affix">%</span></div>
+        </div>
+        <div class="field">
+          <label for="b-redeem">到期價格</label>
+          <div class="input-wrap"><input class="input" id="b-redeem" name="redemptionPrice" inputmode="decimal" value="100"><span class="input-affix">%</span></div>
+        </div>
+        <div class="field">
+          <label for="b-coupon">票面利率</label>
+          <div class="input-wrap"><input class="input" id="b-coupon" name="couponRate" inputmode="decimal" value="4.5"><span class="input-affix">%</span></div>
+        </div>
+        <div class="field">
+          <label for="b-frequency">配息頻率</label>
+          <select class="input" id="b-frequency" name="frequency" data-options="frequencies" data-default="SEMI_ANNUAL"></select>
+        </div>
+        <div class="field">
+          <label for="b-years">年期</label>
+          <div class="input-wrap"><input class="input" id="b-years" name="years" inputmode="numeric" value="10"><span class="input-affix">年</span></div>
+        </div>
+        <div class="field">
+          <label for="b-fee">手續費</label>
+          <div class="input-wrap"><input class="input" id="b-fee" name="feeRate" inputmode="decimal" value="0"><span class="input-affix">%</span></div>
+        </div>
+        <div class="field">
+          <label for="b-tax">配息稅率</label>
+          <div class="input-wrap"><input class="input" id="b-tax" name="taxRate" inputmode="decimal" value="0"><span class="input-affix">%</span></div>
+        </div>
+      </div>
+
+      <fieldset class="fieldset" data-exchange>
+        <legend>匯率 <span class="fieldset__hint" data-rate-caption>（1 USD 可換多少新台幣）</span></legend>
+        <div class="fields">
+          <div class="field">
+            <label for="b-rate-buy">買入匯率</label>
+            <input class="input" id="b-rate-buy" name="buyExchangeRate" inputmode="decimal" data-rate>
+          </div>
+          <div class="field">
+            <label for="b-rate-coupon">配息匯率</label>
+            <input class="input" id="b-rate-coupon" name="couponExchangeRate" inputmode="decimal" data-rate>
+          </div>
+          <div class="field">
+            <label for="b-rate-redeem">到期匯率</label>
+            <input class="input" id="b-rate-redeem" name="redemptionExchangeRate" inputmode="decimal" data-rate>
+          </div>
+        </div>
+      </fieldset>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile tile--primary"><span class="tile__label">到期殖利率 (YTM)</span><span class="tile__value" data-out="ytm">—</span></div>
+        <div class="tile"><span class="tile__label">年化報酬率 <span data-out="codeLabel">USD</span></span><span class="tile__value" data-out="bondAnnual">—</span></div>
+        <div class="tile" data-foreign><span class="tile__label">年化報酬率 台幣</span><span class="tile__value" data-out="homeAnnual">—</span></div>
+        <div class="tile" data-foreign><span class="tile__label">匯兌損益</span><span class="tile__value" data-out="exchangeGain">—</span></div>
+      </div>
+      <div class="card card--flush">
+        <div class="card__head"><h2>報酬摘要</h2></div>
+        <div class="table-wrap table-wrap--auto">
+          <table class="data-table data-table--summary">
+            <thead><tr><th scope="col">項目</th><th scope="col" data-out="codeHead">USD</th><th scope="col" data-foreign>換回台幣</th></tr></thead>
+            <tbody data-summary-rows></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="note">匯率預設值僅為範例，請輸入實際匯率。假設在配息日買進，未計應計利息、買賣價差、提前贖回與換匯手續費，試算僅供參考。</p>
+      <div class="card card--flush">
+        <div class="card__head">
+          <h2>現金流明細</h2>
+          <span class="card__meta" data-out="rowCount"></span>
+        </div>
+        <div class="table-wrap" tabindex="0" aria-label="現金流明細，可捲動">
+          <table class="data-table">
+            <thead><tr><th scope="col">期數</th><th scope="col">年度</th><th scope="col">配息(原幣)</th><th scope="col">本金(原幣)</th><th scope="col">配息(台幣)</th><th scope="col">本金(台幣)</th><th scope="col">累計收回(台幣)</th><th scope="col">累計報酬率</th></tr></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 幣別轉換 -->
+  <section class="page" id="page-currency" data-page="currency" aria-labelledby="h-currency" hidden>
+    <div class="page__head">
+      <h1 id="h-currency">幣別轉換</h1>
+      <p class="page__desc">透過新台幣換算兩種幣別，匯率由你輸入銀行的實際牌告或成交匯率。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/currency">
+      <div class="card__head">
+        <h2>轉換條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="x-amount">金額</label>
+          <input class="input" id="x-amount" name="amount" data-kind="money" inputmode="decimal" value="1,000">
+        </div>
+      </div>
+      <div class="exchange">
+        <div class="exchange__side">
+          <div class="field">
+            <label for="x-from">從</label>
+            <select class="input" id="x-from" name="from" data-options="currencies" data-default="USD"></select>
+          </div>
+          <div class="field">
+            <label for="x-from-rate" data-rate-label="from">1 USD 可換新台幣</label>
+            <input class="input" id="x-from-rate" name="fromRate" inputmode="decimal" data-rate-for="x-from">
+          </div>
+        </div>
+        <button type="button" class="swap-btn" data-swap aria-label="交換兩種幣別">
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>
+        </button>
+        <div class="exchange__side">
+          <div class="field">
+            <label for="x-to">到</label>
+            <select class="input" id="x-to" name="to" data-options="currencies" data-default="TWD"></select>
+          </div>
+          <div class="field">
+            <label for="x-to-rate" data-rate-label="to">1 TWD 可換新台幣</label>
+            <input class="input" id="x-to-rate" name="toRate" inputmode="decimal" data-rate-for="x-to">
+          </div>
+        </div>
+      </div>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile tile--primary"><span class="tile__label">轉換結果</span><span class="tile__value" data-out="result">—</span></div>
+        <div class="tile"><span class="tile__label">換算匯率</span><span class="tile__value" data-out="crossRate">—</span></div>
+      </div>
+      <p class="note">匯率預設值僅為範例，請輸入銀行的實際牌告或成交匯率。</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer container">
+  <p>試算結果僅供參考，實際金額以金融機構為準。</p>
+  <p class="footer__version">FullMoney 理財試算 <span data-version></span></p>
+</footer>
+
+<template id="tpl-rate-row">
+  <div class="period-row">
+    <div class="field">
+      <label data-for="period">起始期數</label>
+      <div class="input-wrap"><input class="input" name="ratePeriod" inputmode="numeric" data-kind="period"><span class="input-affix">期</span></div>
+      <span class="field__hint" data-hint></span>
+    </div>
+    <div class="field">
+      <label data-for="value">年利率</label>
+      <div class="input-wrap"><input class="input" name="rateValue" inputmode="decimal"><span class="input-affix">%</span></div>
+    </div>
+    <button type="button" class="icon-btn" data-remove aria-label="刪除這筆分段利率">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+</template>
+
+<template id="tpl-prepay-row">
+  <div class="period-row">
+    <div class="field">
+      <label data-for="period">期數</label>
+      <div class="input-wrap"><input class="input" name="prepayPeriod" inputmode="numeric" data-kind="period"><span class="input-affix">期</span></div>
+      <span class="field__hint" data-hint></span>
+    </div>
+    <div class="field">
+      <label data-for="value">金額</label>
+      <div class="input-wrap"><input class="input" name="prepayAmount" data-kind="money" inputmode="numeric"><span class="input-affix">元</span></div>
+      <span class="field__hint" data-hint></span>
+    </div>
+    <button type="button" class="icon-btn" data-remove aria-label="刪除這筆提前還款">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+</template>
+</body>
+</html>
