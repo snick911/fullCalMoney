@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fullmoney.bean.AllocationProfile;
 import com.fullmoney.bean.BondCondition;
 import com.fullmoney.bean.BondResult;
 import com.fullmoney.bean.CouponFrequency;
@@ -239,18 +240,27 @@ public final class CalculatorCheck {
 		//可達成的方案：從風險最低的往上列到第一個一般行情可達成的，再多列一類，最多 3 個
 		String bondOrStock = plan("years=5&months=0&profit=250000");
 		check("plan options bond or stock", "BOND BALANCED STOCK", optionCodes(bondOrStock));
-		check("plan allocation bond 60 stock 40", true, bondOrStock.contains("{\"code\":\"BOND\",\"name\":\"債券\",\"percent\":60},{\"code\":\"STOCK\"")
-				&& bondOrStock.contains("\"rate\":0.0490000000"));
+		//資產配置：報酬率依比例加權，建議期間足夠且一般行情可達成中最保守的一型
+		check("plan portfolio rates", true, bondOrStock.contains("\"deposit\":30,\"bond\":50,\"stock\":20,\"typicalRate\":0.0360000000,\"maxRate\":0.0550000000")
+				&& bondOrStock.contains("\"deposit\":10,\"bond\":40,\"stock\":50,\"typicalRate\":0.0505000000,\"maxRate\":0.0820000000"));
+		check("plan portfolio recommend aggressive", true, bondOrStock.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"custom\":false,\"recommended\":true"));
+		check("plan portfolio short horizon conservative", true, plan("years=2&months=0&profit=93330")
+				.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"custom\":false,\"recommended\":true"));
+		check("plan portfolio none enough", true, plan("years=10&months=0&profit=1500000").contains("三種參考配置的報酬率都不足"));
+		check("allocation classify", "CONSERVATIVE CONSERVATIVE BALANCED BALANCED AGGRESSIVE", AllocationProfile.classify(20) + " " + AllocationProfile.classify(25)
+				+ " " + AllocationProfile.classify(26) + " " + AllocationProfile.classify(45) + " " + AllocationProfile.classify(50));
+		String customMix = plan("years=5&months=0&profit=250000&allocDeposit=0&allocBond=60&allocStock=40");
+		check("plan custom portfolio", true, customMix.contains("\"code\":\"BALANCED\",\"name\":\"穩健型\",\"custom\":true,\"recommended\":false,\"deposit\":0,\"bond\":60,\"stock\":40,\"typicalRate\":0.0490000000"));
+		check("plan custom portfolio sum", true, plan("years=5&months=0&profit=250000&allocDeposit=10&allocBond=40&allocStock=40").contains("\"field\":\"allocStock\""));
+		check("plan no custom portfolio", false, bondOrStock.contains("\"custom\":true"));
 		check("plan options long horizon", "STOCK AGGRESSIVE", optionCodes(plan("years=10&months=0&profit=1500000")));
 		String small = plan("years=5&months=0&profit=51010");
 		check("plan options small target", "DEPOSIT BOND", optionCodes(small));
-		check("plan small target no allocation", true, small.contains("\"allocation\":null"));
 		check("plan zero profit only deposit", "DEPOSIT", optionCodes(plan("years=3&months=6&profit=0")));
 		String shortBond = plan("years=2&months=0&profit=93330");
 		check("plan short horizon options capped", "BOND BALANCED STOCK", optionCodes(shortBond));
 		check("plan short horizon stock flagged", true, shortBond.contains("\"code\":\"STOCK\",\"name\":\"股票／基金\",\"fit\":\"COMFORTABLE\",\"horizonOk\":false"));
 		check("plan speculative single option", "SPECULATIVE", optionCodes(doubled));
-		check("plan speculative no allocation", true, doubled.contains("\"allocation\":null"));
 
 		//每月投資：以二分法求出的報酬率，期滿金額要剛好等於總投入 + 期望獲利
 		double monthlyRate = InvestmentPlanner.requiredRate(0, 10000, 120, 500000);
@@ -286,7 +296,7 @@ public final class CalculatorCheck {
 
 	/** 投資計畫回應中 options 的類別代碼，以空白分隔 */
 	private static String optionCodes(String json) {
-		String options = json.substring(json.indexOf("\"options\":"), json.indexOf("\"allocation\":"));
+		String options = json.substring(json.indexOf("\"options\":"), json.indexOf("\"portfolioSummary\":"));
 		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"code\":\"([A-Z]+)\"").matcher(options);
 		StringBuilder codes = new StringBuilder();
 		while (matcher.find()) {

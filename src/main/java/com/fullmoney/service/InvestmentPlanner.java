@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fullmoney.bean.AllocationProfile;
 import com.fullmoney.bean.InvestmentPlan;
 import com.fullmoney.bean.InvestmentPlan.Fit;
 import com.fullmoney.bean.InvestmentTier;
@@ -20,7 +21,8 @@ import com.fullmoney.bean.InvestmentTier;
  * <ol>
  * <li>從風險最低的類別往上找，報酬率上限（行情好）達得到的類別都是可考慮的方案。</li>
  * <li>列到第一個「一般行情就能達成、且投資期間足夠」的類別，再多列一類較高報酬的選擇，最多 3 個方案。</li>
- * <li>需要的報酬率介於兩類的一般行情報酬率之間時，提出兩類混合的配置建議。</li>
+ * <li>資產配置：評估保守型、穩健型、積極型三種參考配置（與使用者自訂的配置），報酬率依定存／債券／股票比例加權，
+ * 建議「期間足夠且一般行情可達成」中最保守的一型，其次「期間足夠但需行情較好」，再其次不看期間。</li>
  * <li>連積極成長的上限都達不到時為高風險投機；年化與總報酬都超過 100% 時只能靠運氣（彩券）。</li>
  * <li>每月浮動投資以區間中間值為預期情況，另外計算只投入下限、投入上限時需要的報酬率。</li>
  * </ol>
@@ -41,14 +43,8 @@ public class InvestmentPlanner {
 	/** 估算延長期間時最多找到 1000 年 */
 	private static final int MAX_SEARCH_MONTHS = 12_000;
 
-	/** 配置建議可混合的兩類，股債平衡本身就是混合，不再拿來配置 */
-	private static final InvestmentTier[][] MIXES = {
-			{ InvestmentTier.DEPOSIT, InvestmentTier.BOND },
-			{ InvestmentTier.BOND, InvestmentTier.STOCK },
-			{ InvestmentTier.STOCK, InvestmentTier.AGGRESSIVE } };
-
-	/** 配置比例的單位（%） */
-	private static final int MIX_STEP = 10;
+	/** 資產配置的三種資產，依序為定存、債券、股票 */
+	private static final InvestmentTier[] ASSETS = { InvestmentTier.DEPOSIT, InvestmentTier.BOND, InvestmentTier.STOCK };
 
 	/** 年化報酬率取到小數第 6 位再比較，避免 5% 因浮點誤差算成 5.0000000001% */
 	private static final double RATE_PRECISION = 1e6;
@@ -71,10 +67,11 @@ public class InvestmentPlanner {
 	 * @param floatMax 每月浮動投資金額的最高值，不小於 floatMin
 	 * @param months 投資期間（月），須大於 0
 	 * @param profit 期望獲利金額，不可為負
+	 * @param customAllocation 自訂資產配置 {定存, 債券, 股票}（%，合計 100），沒有時為 null
 	 * @throws IllegalArgumentException 預期情況沒有投入任何資金
 	 */
 	public InvestmentPlan plan(BigDecimal principal, BigDecimal monthlyFixed, BigDecimal floatMin, BigDecimal floatMax, int months,
-			BigDecimal profit) {
+			BigDecimal profit, int[] customAllocation) {
 		BigDecimal monthly = monthlyFixed.add(floatMin.add(floatMax).divide(TWO));
 		BigDecimal invested = invested(principal, monthly, months);
 		if (invested.signum() <= 0) {
@@ -104,7 +101,16 @@ public class InvestmentPlanner {
 		}
 		BigDecimal lowRate = plan.getLowCase() == null ? null : plan.getLowCase().getRate();
 		plan.setOptions(options(tier, p, m, months, rate, profit, plan.getLowCase() != null, lowRate, target));
-		plan.setAllocation(profit.signum() > 0 && plan.isFeasible() ? allocation(p, m, months, rate) : null);
+		List<InvestmentPlan.Portfolio> portfolios = new ArrayList<>();
+		for (AllocationProfile profile : AllocationProfile.values()) {
+			portfolios.add(portfolio(profile, false, profile.getDeposit(), profile.getBond(), profile.getStock(), p, m, months, rate, target));
+		}
+		plan.setRecommendedProfile(recommend(portfolios));
+		if (customAllocation != null) {
+			int stock = customAllocation[2];
+			portfolios.add(portfolio(AllocationProfile.classify(stock), true, customAllocation[0], customAllocation[1], stock, p, m, months, rate, target));
+		}
+		plan.setPortfolios(portfolios);
 		plan.setRows(rows(principal, monthly, target, months, rate));
 
 		//期間短於風險最低方案的建議年數：延長到建議年數、每月照常投入時需要的年化報酬率
@@ -226,23 +232,40 @@ public class InvestmentPlanner {
 		return options;
 	}
 
-	/** 需要的報酬率介於兩類的一般行情報酬率之間時，算出高風險那一類至少要占多少比例 */
-	private static InvestmentPlan.Allocation allocation(double principal, double monthly, int months, double rate) {
-		for (InvestmentTier[] mix : MIXES) {
-			double low = mix[0].getTypicalRate().doubleValue();
-			double high = mix[1].getTypicalRate().doubleValue();
-			if (rate <= low + EPSILON || rate >= high - EPSILON) {
-				continue;
+	/** 評估一組定存／債券／股票配置：報酬率依比例加權 */
+	private static InvestmentPlan.Portfolio portfolio(AllocationProfile profile, boolean custom, int deposit, int bond, int stock, double principal,
+			double monthly, int months, double rate, BigDecimal target) {
+		int[] weights = { deposit, bond, stock };
+		BigDecimal typical = BigDecimal.ZERO;
+		BigDecimal max = BigDecimal.ZERO;
+		for (int i = 0; i < ASSETS.length; i++) {
+			typical = typical.add(ASSETS[i].getTypicalRate().multiply(BigDecimal.valueOf(weights[i])));
+			max = max.add(ASSETS[i].getMaxRate().multiply(BigDecimal.valueOf(weights[i])));
+		}
+		typical = typical.movePointLeft(2);
+		max = max.movePointLeft(2);
+		Fit fit = rate <= typical.doubleValue() + EPSILON ? Fit.COMFORTABLE : rate <= max.doubleValue() + EPSILON ? Fit.STRETCH : Fit.INFEASIBLE;
+		BigDecimal typicalEnd = decimal(futureValue(principal, monthly, typical.doubleValue(), months));
+		if (fit == Fit.COMFORTABLE && typicalEnd.compareTo(target) < 0) {
+			typicalEnd = target;
+		}
+		boolean horizonOk = months >= profile.getMinYears() * MONTHS_PER_YEAR;
+		return new InvestmentPlan.Portfolio(profile, custom, deposit, bond, stock, typical, max, typicalEnd, fit, horizonOk);
+	}
+
+	/**
+	 * 建議的參考配置，依序找：期間足夠且一般行情可達成、期間足夠但需行情較好、一般行情可達成、需行情較好；
+	 * 同一級取最保守的一型
+	 */
+	private static AllocationProfile recommend(List<InvestmentPlan.Portfolio> portfolios) {
+		for (int level = 0; level < 4; level++) {
+			Fit wanted = level % 2 == 0 ? Fit.COMFORTABLE : Fit.STRETCH;
+			boolean needHorizon = level < 2;
+			for (InvestmentPlan.Portfolio portfolio : portfolios) {
+				if (portfolio.getFit() == wanted && (!needHorizon || portfolio.isHorizonOk())) {
+					return portfolio.getProfile();
+				}
 			}
-			int highPercent = (int) Math.ceil((rate - low) / (high - low) * (100 / MIX_STEP) - EPSILON) * MIX_STEP;
-			if (highPercent <= 0 || highPercent >= 100) {
-				return null;
-			}
-			BigDecimal blended = mix[0].getTypicalRate().multiply(BigDecimal.valueOf(100 - highPercent))
-					.add(mix[1].getTypicalRate().multiply(BigDecimal.valueOf(highPercent))).movePointLeft(2);
-			boolean horizonOk = months >= mix[1].getMinYears() * MONTHS_PER_YEAR;
-			BigDecimal endAmount = decimal(futureValue(principal, monthly, blended.doubleValue(), months));
-			return new InvestmentPlan.Allocation(mix[0], mix[1], highPercent, blended, endAmount, horizonOk);
 		}
 		return null;
 	}

@@ -72,6 +72,17 @@ public final class Params {
 		return value == null || normalize(value).isEmpty() ? fallback : decimal(name, label, min, max);
 	}
 
+	/** 選填的整數：沒有送出或空白時用 fallback，有輸入時照樣檢查格式與範圍 */
+	public int optionalInteger(String name, String label, int min, int max, int fallback) {
+		String value = first(name);
+		return value == null || normalize(value).isEmpty() ? fallback : integer(name, label, min, max);
+	}
+
+	/** @return 是否送出了此參數（含空白） */
+	public boolean has(String name) {
+		return first(name) != null;
+	}
+
 	public int integer(String name, String label, int min, int max) {
 		return toInteger(first(name), name, label, min, max);
 	}

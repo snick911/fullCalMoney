@@ -368,6 +368,7 @@
     COMFORTABLE: ['一般行情可達成', ''],
     STRETCH: ['需行情較好', ' option__tag--warn'],
   };
+  const PORTFOLIO_FITS = { ...FIT_TAGS, INFEASIBLE: ['不足', ' option__tag--danger'] };
 
   /** 一個方案的卡片：適合程度、標的、風險、兩種行情的期滿金額 */
   function optionCard(o, twd, tier) {
@@ -424,18 +425,26 @@
 
     $('[data-options]', scope).innerHTML = d.options.map((o) => optionCard(o, twd, d.tier)).join('');
 
-    const allocation = d.allocation;
-    $('[data-allocation]', scope).hidden = !allocation;
-    if (allocation) {
-      //CSP 不允許 HTML 裡的 style 屬性，寬度改由 CSSOM 設定
-      $('[data-allocation-bar]', scope).replaceChildren(...allocation.parts.map((p) => {
-        const segment = document.createElement('span');
-        segment.style.width = `${Number(p.percent)}%`;
-        return segment;
-      }));
-      setOut(scope, 'allocationParts', allocation.parts.map((p) => `${p.name} ${p.percent}%`).join('　＋　'));
-      setOut(scope, 'allocationText', `${allocation.text}期滿約 ${twd(allocation.endAmount)}。`);
-    }
+    //資產配置：三種參考配置與我的配置
+    setOut(scope, 'portfolioSummary', d.portfolioSummary);
+    const custom = d.portfolios.find((p) => p.custom);
+    setOut(scope, 'customType', custom ? `屬於「${custom.name}」（股票 ${custom.stock}%）` : '');
+    const body = $('tbody[data-portfolio-rows]', scope);
+    body.innerHTML = d.portfolios.map((p) => {
+      const [fitText, fitClass] = PORTFOLIO_FITS[p.fit];
+      const label = p.custom ? `我的配置（${escapeHtml(p.name)}）` : escapeHtml(p.name);
+      const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
+      const tags = `<span class="option__tag${fitClass}">${fitText}</span>`
+        + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">期間短於 ${escapeHtml(p.horizon)}</span>`);
+      return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${label}${badge}</th>`
+        + `<td><span class="mix"><span class="mix__bar" aria-hidden="true"><i></i><i></i><i></i></span>${p.deposit}／${p.bond}／${p.stock}</span></td>`
+        + `<td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.maxRate)}</td><td>${twd(p.typicalEnd)}</td><td>${tags}</td></tr>`;
+    }).join('');
+    //CSP 不允許 HTML 裡的 style 屬性，長條寬度改由 CSSOM 設定
+    $$('.mix__bar', body).forEach((bar, i) => {
+      const p = d.portfolios[i];
+      [p.deposit, p.bond, p.stock].forEach((percent, j) => { bar.children[j].style.width = `${Number(percent)}%`; });
+    });
 
     $('[data-items="warnings"]', scope).innerHTML = d.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('');
     $('[data-items="suggestions"]', scope).innerHTML = d.suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join('');

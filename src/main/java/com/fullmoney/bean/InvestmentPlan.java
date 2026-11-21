@@ -17,7 +17,7 @@ public class InvestmentPlan {
 		COMFORTABLE,
 		/** 需要行情較好（報酬率接近上限）才能達成 */
 		STRETCH,
-		/** 一般投資無法達成，只剩高風險投機或彩券 */
+		/** 一般投資無法達成，只剩高風險投機或彩券；用於資產配置時表示行情好也達不到 */
 		INFEASIBLE
 	}
 
@@ -95,48 +95,77 @@ public class InvestmentPlan {
 		}
 	}
 
-	/** 配置建議：低風險與高風險兩類標的的比例，以一般行情報酬率加權後剛好達到需要的報酬率（比例取 10% 為單位，向上取） */
-	public static final class Allocation {
+	/** 一組資產配置（定存／債券／股票）的評估，報酬率依比例加權 */
+	public static final class Portfolio {
 
-		private final InvestmentTier low;
-		private final InvestmentTier high;
-		private final int highPercent;
-		private final BigDecimal rate;
-		private final BigDecimal endAmount;
+		private final AllocationProfile profile;
+		private final boolean custom;
+		private final int deposit;
+		private final int bond;
+		private final int stock;
+		private final BigDecimal typicalRate;
+		private final BigDecimal maxRate;
+		private final BigDecimal typicalEnd;
+		private final Fit fit;
 		private final boolean horizonOk;
 
-		public Allocation(InvestmentTier low, InvestmentTier high, int highPercent, BigDecimal rate, BigDecimal endAmount, boolean horizonOk) {
-			this.low = low;
-			this.high = high;
-			this.highPercent = highPercent;
-			this.rate = rate;
-			this.endAmount = endAmount;
+		public Portfolio(AllocationProfile profile, boolean custom, int deposit, int bond, int stock, BigDecimal typicalRate, BigDecimal maxRate,
+				BigDecimal typicalEnd, Fit fit, boolean horizonOk) {
+			this.profile = profile;
+			this.custom = custom;
+			this.deposit = deposit;
+			this.bond = bond;
+			this.stock = stock;
+			this.typicalRate = typicalRate;
+			this.maxRate = maxRate;
+			this.typicalEnd = typicalEnd;
+			this.fit = fit;
 			this.horizonOk = horizonOk;
 		}
 
-		public InvestmentTier getLow() {
-			return low;
+		/** 配置類型；自訂配置為依股票比例分類的結果 */
+		public AllocationProfile getProfile() {
+			return profile;
 		}
 
-		public InvestmentTier getHigh() {
-			return high;
+		/** 是否為使用者自訂的配置 */
+		public boolean isCustom() {
+			return custom;
 		}
 
-		/** 高風險那一類的比例（%），低風險為 100 減此值 */
-		public int getHighPercent() {
-			return highPercent;
+		public int getDeposit() {
+			return deposit;
 		}
 
-		/** 加權後的一般行情年報酬率 */
-		public BigDecimal getRate() {
-			return rate;
+		public int getBond() {
+			return bond;
 		}
 
-		public BigDecimal getEndAmount() {
-			return endAmount;
+		public int getStock() {
+			return stock;
 		}
 
-		/** 投資期間是否達到高風險那一類建議的年數 */
+		/** 一般行情的加權年報酬率 */
+		public BigDecimal getTypicalRate() {
+			return typicalRate;
+		}
+
+		/** 行情好的加權年報酬率 */
+		public BigDecimal getMaxRate() {
+			return maxRate;
+		}
+
+		/** 以一般行情加權報酬率計算的期滿金額 */
+		public BigDecimal getTypicalEnd() {
+			return typicalEnd;
+		}
+
+		/** COMFORTABLE 一般行情可達成、STRETCH 需行情較好、INFEASIBLE 行情好也達不到 */
+		public Fit getFit() {
+			return fit;
+		}
+
+		/** 投資期間是否達到此類型建議的年數 */
 		public boolean isHorizonOk() {
 			return horizonOk;
 		}
@@ -191,7 +220,8 @@ public class InvestmentPlan {
 	private Case lowCase;
 	private Case highCase;
 	private List<Option> options;
-	private Allocation allocation;
+	private List<Portfolio> portfolios;
+	private AllocationProfile recommendedProfile;
 	private List<Row> rows;
 	private BigDecimal extendedRate;
 	private InvestmentTier extendedTier;
@@ -316,13 +346,22 @@ public class InvestmentPlan {
 		this.options = options;
 	}
 
-	/** 配置建議，不需要混合兩類時為 null */
-	public Allocation getAllocation() {
-		return allocation;
+	/** 三種參考配置（保守型、穩健型、積極型），有自訂配置時接在最後 */
+	public List<Portfolio> getPortfolios() {
+		return portfolios;
 	}
 
-	public void setAllocation(Allocation allocation) {
-		this.allocation = allocation;
+	public void setPortfolios(List<Portfolio> portfolios) {
+		this.portfolios = portfolios;
+	}
+
+	/** 建議的參考配置，三種都達不到時為 null */
+	public AllocationProfile getRecommendedProfile() {
+		return recommendedProfile;
+	}
+
+	public void setRecommendedProfile(AllocationProfile recommendedProfile) {
+		this.recommendedProfile = recommendedProfile;
 	}
 
 	public List<Row> getRows() {

@@ -535,6 +535,24 @@
             </div>
           </div>
         </fieldset>
+        <fieldset class="range">
+          <legend>我的資產配置 <span class="range__hint">（比例合計 100%）</span></legend>
+          <div class="alloc__inputs">
+            <div class="field">
+              <label for="p-alloc-deposit">定存</label>
+              <div class="input-wrap"><input class="input" id="p-alloc-deposit" name="allocDeposit" inputmode="numeric" value="0"><span class="input-affix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="p-alloc-bond">債券</label>
+              <div class="input-wrap"><input class="input" id="p-alloc-bond" name="allocBond" inputmode="numeric" value="60"><span class="input-affix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="p-alloc-stock">股票</label>
+              <div class="input-wrap"><input class="input" id="p-alloc-stock" name="allocStock" inputmode="numeric" value="40"><span class="input-affix">%</span></div>
+            </div>
+          </div>
+          <p class="alloc__result" data-out="customType"></p>
+        </fieldset>
       </div>
       <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
@@ -565,11 +583,16 @@
           </div>
         </section>
         <div class="options" data-options></div>
-        <section class="allocation" data-allocation hidden>
-          <h3 class="advice__sub">配置建議</h3>
-          <div class="allocation__bar" data-allocation-bar aria-hidden="true"></div>
-          <p class="allocation__parts" data-out="allocationParts"></p>
-          <p class="allocation__text" data-out="allocationText"></p>
+        <section data-portfolios>
+          <h3 class="advice__sub">資產配置</h3>
+          <p class="portfolio__summary" data-out="portfolioSummary"></p>
+          <div class="table-wrap table-wrap--auto spread" tabindex="0" aria-label="資產配置，可捲動">
+            <table class="data-table data-table--summary">
+              <thead><tr><th scope="col">配置</th><th scope="col">定存／債券／股票</th><th scope="col">一般行情</th><th scope="col">行情好</th><th scope="col">期滿金額（一般行情）</th><th scope="col">評估</th></tr></thead>
+              <tbody data-portfolio-rows></tbody>
+            </table>
+          </div>
+          <p class="portfolio__rule">依股票比例分類：25% 以下保守型、26%～45% 穩健型、超過 45% 積極型。報酬率依比例加權（定存 1.5%～2%、債券 3.5%～5%、股票 7%～12%）。長條由淺到深為定存、債券、股票。</p>
         </section>
         <ul class="advice__list advice__list--warn" data-items="warnings"></ul>
         <div data-suggestions hidden>
