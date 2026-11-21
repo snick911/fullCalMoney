@@ -24,6 +24,7 @@ import com.fullmoney.bean.SaveMoney;
 import com.fullmoney.service.BondCalculator;
 import com.fullmoney.service.CurrencyConverter;
 import com.fullmoney.service.FloatingMoneyCalculator;
+import com.fullmoney.service.InvestmentPlanner;
 import com.fullmoney.service.MoneyCalculator;
 import com.fullmoney.service.MortgageCalculator;
 import com.fullmoney.web.ApiEndpoint;
@@ -216,6 +217,25 @@ public final class CalculatorCheck {
 				.contains("\"field\":\"addMax\""));
 		check("endpoint floating rate range", true, call("/api/floating", floatingQuery.replace("rateMax=6", "rateMax=1"))
 				.contains("\"field\":\"rateMax\""));
+
+		//投資計畫：依需要的年化報酬率套用建議規則
+		check("plan 5% is bond", true, plan("years=5&months=0&profit=276281.5625").contains("\"tier\":\"BOND\""));
+		check("plan 5.01% is balanced", true, plan("years=5&months=0&profit=277600").contains("\"tier\":\"BALANCED\""));
+		check("plan long 150% is stock", true, plan("years=10&months=0&profit=1500000").contains("\"tier\":\"STOCK\""));
+		String doubled = plan("years=2&months=0&profit=1000000");
+		check("plan 2y double speculative", true, doubled.contains("\"tier\":\"SPECULATIVE\"") && doubled.contains("\"feasible\":false")
+				&& doubled.contains("延長期間"));
+		check("plan 1y x4 lottery", true, plan("years=1&months=0&profit=3000000").contains("\"tier\":\"LOTTERY\""));
+		check("plan short month not lottery", true, plan("years=0&months=1&profit=100000").contains("\"tier\":\"SPECULATIVE\""));
+		check("plan zero profit deposit", true, plan("years=3&months=6&profit=0").contains("\"tier\":\"DEPOSIT\""));
+		String shortStock = plan("years=3&months=0&profit=400000");
+		check("plan short horizon warns", true, shortStock.contains("\"tier\":\"STOCK\"") && shortStock.contains("\"feasible\":true")
+				&& shortStock.contains("短於"));
+		check("plan last row is target", true, plan("years=2&months=6&profit=250000").contains("[30,1250000.00,250000.00,"));
+		check("plan needs period", true, plan("years=0&months=0&profit=1").contains("\"field\":\"years\""));
+		check("plan tier boundaries", "DEPOSIT BOND SPECULATIVE LOTTERY", InvestmentPlanner.tierOf(0.02, 0.1) + " " + InvestmentPlanner.tierOf(0.020001, 0.1)
+				+ " " + InvestmentPlanner.tierOf(1.5, 0.5) + " " + InvestmentPlanner.tierOf(1.5, 1.5));
+		check("meta investment tiers", true, call("/api/meta", "").contains("\"investmentTiers\":[{\"code\":\"DEPOSIT\""));
 		check("numbers group negative", "-1,234,567.5", Numbers.group(new BigDecimal("-1234567.50"), 2));
 		check("numbers group small", "0.0001", Numbers.group(new BigDecimal("0.0001"), 4));
 		check("numbers group billion", "1,000,000,000", Numbers.group(new BigDecimal("1000000000"), 4));
@@ -223,6 +243,10 @@ public final class CalculatorCheck {
 
 	private static String compound(String query) {
 		return call("/api/compound", query);
+	}
+
+	private static String plan(String query) {
+		return call("/api/plan", "principal=1%2C000%2C000&" + query);
 	}
 
 	private static String call(String path, String query) {

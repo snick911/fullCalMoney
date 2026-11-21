@@ -480,6 +480,51 @@ select.input option { background: var(--surface); color: var(--fg); }
 .data-table--summary tr > :first-child { text-align: left; }
 .data-table--summary tbody th { background: var(--surface); color: var(--fg); font-weight: 700; }
 
+/* 投資計畫：建議卡片，左側色條表示可行（主色）、需留意（警示）、不可行（危險） */
+.advice {
+  padding: 1rem 1.125rem 1.1rem;
+  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.advice[data-level="warn"] { border-left-color: var(--warn); }
+.advice[data-level="danger"] { border-left-color: var(--danger); }
+.advice__head { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .75rem; }
+.advice__label { width: 100%; color: var(--muted); font-size: .8125rem; font-weight: 700; }
+.advice__title { margin: 0; font-size: 1.3rem; color: var(--accent); }
+.advice[data-level="danger"] .advice__title { color: var(--danger); }
+.advice__verdict {
+  padding: .1rem .65rem; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: .8125rem; font-weight: 700;
+}
+.advice[data-level="warn"] .advice__verdict { background: var(--warn-bg); color: var(--warn); }
+.advice[data-level="danger"] .advice__verdict { background: var(--danger-bg); color: var(--danger); }
+.advice__summary { margin: .65rem 0 0; font-weight: 600; }
+.advice__facts {
+  display: grid; gap: .6rem 1rem; margin: .85rem 0 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.advice__facts div { padding: .55rem .75rem; border-radius: 9px; background: var(--stripe); }
+.advice__facts dt { color: var(--muted); font-size: .8125rem; font-weight: 700; }
+.advice__facts dd { margin: .1rem 0 0; }
+.advice__note { margin: .85rem 0 0; color: var(--muted); font-size: .9375rem; }
+.advice__sub { margin: .9rem 0 0; font-size: .9375rem; }
+.advice__list { margin: .5rem 0 0; padding-left: 1.25rem; }
+.advice__list:empty { display: none; }
+.advice__list li + li { margin-top: .3rem; }
+.advice__list--warn { margin-top: .75rem; color: var(--warn); font-weight: 600; }
+
+/* 目前建議的那一列 */
+.data-table tbody tr.is-current > * { background: var(--accent-soft); }
+.data-table tbody tr.is-current > :first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.data-table .is-muted { color: var(--muted); }
+/* 規則表文字較長，允許換行 */
+.data-table--rules th, .data-table--rules td { text-align: left; white-space: normal; vertical-align: top; }
+.data-table--rules tr > :first-child { text-align: left; min-width: 9rem; }
+.data-table--rules td:nth-child(2), .data-table--rules td:nth-child(4), .data-table--rules td:nth-child(5) { white-space: nowrap; }
+.data-table--rules td:nth-child(3) { min-width: 12rem; }
+.data-table--rules td:last-child { min-width: 18rem; color: var(--muted); }
+.data-table--rules tbody th { background: var(--surface); color: var(--fg); font-weight: 700; }
+
 /* 新台幣債券不顯示換回台幣的欄位 */
 .page.is-domestic [data-foreign] { display: none; }
 

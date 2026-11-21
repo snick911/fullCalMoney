@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FullMoney 理財試算</title>
-<meta name="description" content="複利試算、房貸計算、債券報酬與幣別轉換，支援手機與電腦瀏覽。">
+<meta name="description" content="複利試算、房貸計算、債券報酬、幣別轉換與投資計畫建議，支援手機與電腦瀏覽。">
 <meta name="theme-color" content="#F2F3F5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/app.css">
@@ -41,6 +41,7 @@
       <a class="tab" href="#mortgage" data-page="mortgage">房貸計算</a>
       <a class="tab" href="#bond" data-page="bond">債券計算</a>
       <a class="tab" href="#currency" data-page="currency">幣別轉換</a>
+      <a class="tab" href="#plan" data-page="plan">投資計畫</a>
     </div>
   </nav>
 
@@ -477,6 +478,112 @@
         <div class="tile"><span class="tile__label">換算匯率</span><span class="tile__value" data-out="crossRate">—</span></div>
       </div>
       <p class="note">匯率預設值僅為範例，請輸入銀行的實際牌告或成交匯率。</p>
+    </div>
+  </section>
+
+  <!-- 投資計畫 -->
+  <section class="page" id="page-plan" data-page="plan" aria-labelledby="h-plan" hidden>
+    <div class="page__head">
+      <h1 id="h-plan">投資計畫</h1>
+      <p class="page__desc">輸入本金、投資期間與期望獲利，算出每年需要的報酬率，再依下方的建議規則找出適合的投資標的。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/plan">
+      <div class="card__head">
+        <h2>計畫條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="p-principal">投資本金</label>
+          <div class="input-wrap"><input class="input" id="p-principal" name="principal" data-kind="money" inputmode="numeric" value="1,000,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
+          <label for="p-years">投資年數</label>
+          <div class="input-wrap"><input class="input" id="p-years" name="years" inputmode="numeric" value="5"><span class="input-affix">年</span></div>
+        </div>
+        <div class="field">
+          <label for="p-months">月數</label>
+          <div class="input-wrap"><input class="input" id="p-months" name="months" inputmode="numeric" value="0"><span class="input-affix">個月</span></div>
+        </div>
+        <div class="field">
+          <label for="p-profit">期望獲利金額</label>
+          <div class="input-wrap"><input class="input" id="p-profit" name="profit" data-kind="money" inputmode="numeric" value="250,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">目標金額</span><span class="tile__value" data-out="target">—</span></div>
+        <div class="tile"><span class="tile__label">總報酬率</span><span class="tile__value" data-out="totalReturn">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label">需要的年化報酬率</span><span class="tile__value" data-out="requiredRate">—</span></div>
+        <div class="tile"><span class="tile__label">風險等級</span><span class="tile__value" data-out="risk">—</span></div>
+      </div>
+
+      <article class="advice" data-advice aria-labelledby="plan-advice-title">
+        <div class="advice__head">
+          <span class="advice__label">投資建議</span>
+          <h2 class="advice__title" id="plan-advice-title" data-out="tierName">—</h2>
+          <span class="advice__verdict" data-out="verdict"></span>
+        </div>
+        <p class="advice__summary" data-out="summary"></p>
+        <dl class="advice__facts">
+          <div><dt>建議標的</dt><dd data-out="instruments">—</dd></div>
+          <div><dt>風險等級</dt><dd data-out="risk">—</dd></div>
+          <div><dt>建議期間</dt><dd data-out="horizon">—</dd></div>
+        </dl>
+        <p class="advice__note" data-out="note"></p>
+        <ul class="advice__list advice__list--warn" data-items="warnings"></ul>
+        <div data-suggestions hidden>
+          <h3 class="advice__sub">調整建議</h3>
+          <ul class="advice__list" data-items="suggestions"></ul>
+        </div>
+      </article>
+
+      <div class="card card--flush">
+        <div class="card__head">
+          <h2>各類標的試算</h2>
+          <span class="card__meta">以各類標的的年報酬率上限計算</span>
+        </div>
+        <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="各類標的試算，可捲動">
+          <table class="data-table data-table--summary">
+            <thead><tr><th scope="col">標的</th><th scope="col">年報酬率</th><th scope="col">期滿金額</th><th scope="col">期滿獲利</th><th scope="col">達成目標</th><th scope="col">達標所需時間</th></tr></thead>
+            <tbody data-scenarios></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card card--flush">
+        <div class="card__head">
+          <h2>逐年試算</h2>
+          <span class="card__meta" data-out="rowsCaption"></span>
+        </div>
+        <div class="table-wrap" tabindex="0" aria-label="逐年試算，可捲動">
+          <table class="data-table">
+            <thead><tr><th scope="col">期間</th><th scope="col">金額</th><th scope="col">累積獲利</th><th scope="col">累積報酬率</th></tr></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card card--flush">
+        <div class="card__head">
+          <h2>建議規則</h2>
+          <span class="card__meta">依需要的年化報酬率由低到高</span>
+        </div>
+        <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="建議規則，可捲動">
+          <table class="data-table data-table--rules">
+            <thead><tr><th scope="col">需要的年化報酬率</th><th scope="col">建議</th><th scope="col">標的</th><th scope="col">風險</th><th scope="col">建議期間</th><th scope="col">說明</th></tr></thead>
+            <tbody data-tiers></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="note">需要的年化報酬率 =（目標金額 ÷ 本金）^（1 ÷ 年數）− 1。各類標的的報酬率為假設的上限，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
     </div>
   </section>
 </main>

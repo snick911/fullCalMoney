@@ -21,6 +21,7 @@
 | 房貸計算 | 本息／本金平均攤還、寬限期、分段利率、提前還款（縮短年限或降低月付），列出每期攤還明細 |
 | 債券計算 | 持有到期的配息、總報酬率、到期殖利率（YTM）、年化報酬率；外幣債券換回台幣的報酬與匯兌損益 |
 | 幣別轉換 | 透過新台幣換算兩種幣別，可一鍵交換 |
+| 投資計畫 | 輸入投資本金、年數＋月數、期望獲利金額，算出需要的年化報酬率，依「建議規則」給出建議標的、風險與調整建議，並列出各類標的試算與逐年試算 |
 
 - 條件一改就自動重算，計算全部在 Java 後端執行。
 - 金額欄位離開時自動補千分位，並顯示「萬／億」換算；可輸入全形數字。
@@ -80,9 +81,10 @@ $env:HOST = '0.0.0.0'; java -jar target\fullcalmoney.jar
 cmd /c test.bat
 ```
 
-`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 64 項，全部通過時結束代碼為 0：
+`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 76 項，全部通過時結束代碼為 0：
 
 - 試算結果與桌面版文件記載的數值相同（見下方「計算參考值」）。
+- 投資計畫：各級規則的邊界（剛好 5% 是債券、5.02% 是股債平衡）、期間不足的提醒、高風險與彩券的判定、短期目標不誤判成彩券。
 - 浮動複利：區間上下限相同時與固定複利相同；相同種子結果相同、不同種子結果不同；每年的值都在區間內；固定種子的結果不可改變（否則使用者保存的種子會算出不同結果）。
 - 輸入檢查：拒絕科學記號、超出範圍、位數過多；接受千分位與全形數字。
 - 伺服器與瀏覽器端引擎共用的 `ApiEndpoint.execute`：正常結果、錯誤欄位、千分位格式。
@@ -97,8 +99,9 @@ src/main/java/com/fullmoney/
 ├─ WebApp.java              進入點，啟動網站
 ├─ AppVersion.java          名稱與版本號（頁尾與 /api/meta 由此取得）
 ├─ bean/                    沿用桌面版：複利、房貸、債券的條件與結果
+│                           新增：InvestmentTier（投資計畫的建議規則）、InvestmentPlan（投資計畫結果）
 ├─ service/                 沿用桌面版：MoneyCalculator、MortgageCalculator、BondCalculator、CurrencyConverter
-│                           新增：FloatingMoneyCalculator（浮動複利）、RangeRandom（可重現的亂數，SplitMix64）
+│                           新增：FloatingMoneyCalculator（浮動複利）、RangeRandom（可重現的亂數，SplitMix64）、InvestmentPlanner（投資計畫）
 └─ web/
    ├─ ApiEndpoint.java      一個 API：參數 → 結果，不依賴 HttpServer，伺服器與瀏覽器端引擎共用
    ├─ ApiHandler.java       把 ApiEndpoint 接到 HttpServer：路徑、請求方式、錯誤紀錄
@@ -107,7 +110,7 @@ src/main/java/com/fullmoney/
    ├─ Json.java / Numbers.java   最小 JSON 輸出、千分位格式
    ├─ StaticHandler.java    從 classpath 提供網頁檔（副檔名白名單、ETag）
    ├─ Http.java             回應標頭（CSP 等安全標頭）、gzip
-   └─ api/                  ApiEndpoints（清單）、CompoundApi、FloatingCompoundApi、MortgageApi、BondApi、CurrencyApi、MetaApi
+   └─ api/                  ApiEndpoints（清單）、CompoundApi、FloatingCompoundApi、MortgageApi、BondApi、CurrencyApi、PlanApi、MetaApi
 src/main/resources/static/
 ├─ index.html               四個分頁的版面
 ├─ css/app.css              主題色系、字體大小、RWD
@@ -150,14 +153,15 @@ mvn -P pages clean process-classes
 
 | 路徑 | 參數 |
 | --- | --- |
-| `GET /api/meta` | 無。回傳版本號與下拉選單選項（幣別與範例匯率、配息頻率、還款方式、提前還款方式） |
+| `GET /api/meta` | 無。回傳版本號、下拉選單選項（幣別與範例匯率、配息頻率、還款方式、提前還款方式）與投資計畫的建議規則 `investmentTiers` |
 | `/api/compound` | `initialAmount`（原始本金）、`baseAmount`（每年固定投入金額）、`rate`、`addAmount`（每年額外增加投入）、`years` |
 | `/api/floating` | `initialAmount`、`baseAmount`、`addMin`、`addMax`、`rateMin`、`rateMax`（-100～100）、`years`、`seed`（0～999,999,999，相同種子結果相同；不送時隨機產生，回傳的 `seed` 為實際使用的種子） |
 | `/api/mortgage` | `loanAmount`、`rate`、`years`、`graceYears`、`method`、`prepaymentMode`；分段利率以 `ratePeriod` + `rateValue` 成對重複送出，提前還款以 `prepayPeriod` + `prepayAmount` 成對重複送出 |
 | `/api/bond` | `currency`、`faceValue`、`buyPrice`、`redemptionPrice`、`couponRate`、`frequency`、`years`、`feeRate`、`taxRate`、`buyExchangeRate`、`couponExchangeRate`、`redemptionExchangeRate`（新台幣不必送匯率） |
 | `/api/currency` | `amount`、`from`、`fromRate`、`to`、`toRate`（新台幣不必送匯率） |
+| `/api/plan` | `principal`（投資本金）、`years`（0～100）、`months`（0～11，合計至少 1 個月）、`profit`（期望獲利金額） |
 
-`/api/compound`、`/api/floating`、`/api/bond`、`/api/currency` 可另外送 `round=1`，金額四捨五入到整數；不送時到小數兩位。回傳的 `decimals` 是金額的小數位數（0 或 2）。
+`/api/compound`、`/api/floating`、`/api/bond`、`/api/currency`、`/api/plan` 可另外送 `round=1`，金額四捨五入到整數；不送時到小數兩位。回傳的 `decimals` 是金額的小數位數（0 或 2）。
 
 條件不合理時回傳 `400`，內容為 `{"error": "給使用者看的訊息", "field": "欄位名稱"}`；清單欄位為 `名稱:索引`，例如 `prepayPeriod:0`。
 
@@ -176,6 +180,30 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 | 複利預設（原始本金 0、每年投入 20 萬、4%、每年加 1 萬、20 年） | 累積財富 $8,736,140.77（不顯示小數時 $8,736,141） |
 | 複利＋原始本金 100 萬 | 投入 $6,900,000，累積財富 $10,927,263.92（多出 100 萬 × 1.04²⁰） |
 | 浮動複利（20 萬、加 5,000～15,000、2%～6%、20 年、種子 123456789） | 累積財富 $8,514,979 |
+| 投資計畫預設（100 萬、5 年、獲利 25 萬） | 需要年化 4.56%，建議債券 |
+| 投資計畫 100 萬、10 年、獲利 150 萬 | 需要年化 9.60%，建議股票／基金 |
+| 投資計畫 100 萬、2 年、獲利 100 萬 | 需要年化 41.42%，高風險投機（可能不可行），以 12% 估算約需 6 年 2 個月 |
+| 投資計畫 100 萬、1 年、獲利 300 萬 | 需要年化 300%，只能靠運氣（不可行） |
+
+## 投資計畫的建議規則
+
+需要的年化報酬率 =（目標金額 ÷ 本金）^（1 ÷ 年數）− 1，年數含月份（2 年 6 個月 = 2.5 年）。依此值由低到高套用第一個符合的規則，規則只定義在 `bean/InvestmentTier.java`，網頁的規則表由 `/api/meta` 取得。
+
+| 需要的年化報酬率 | 建議 | 標的 | 風險 | 建議期間 |
+| --- | --- | --- | --- | --- |
+| 2% 以下 | 保本型 | 定存、貨幣市場基金、儲蓄險 | 極低 | 不限 |
+| 2%～5% | 債券 | 政府公債、投資等級公司債、債券型 ETF／基金 | 低 | 1 年以上 |
+| 5%～8% | 股債平衡 | 股債平衡配置、平衡型基金、高股息 ETF | 中 | 3 年以上 |
+| 8%～12% | 股票／基金 | 市值型 ETF、股票型基金、績優股（可定期定額） | 中高 | 5 年以上 |
+| 12%～20% | 積極成長 | 成長股、產業／主題型基金、槓桿型 ETF | 高 | 5 年以上 |
+| 20% 以上 | 高風險投機（可能不可行） | 期貨、選擇權、權證 | 極高 | 短線操作 |
+| 100% 以上，且總報酬也超過 100% | 只能靠運氣（不可行） | 大樂透、威力彩等彩券 | 幾乎必定虧損 | — |
+
+- 投資期間短於建議期間時仍給同一級建議，但提醒短期波動並列出「延長到建議年數後需要的年化報酬率」。年數夠長時，總報酬 100%～200% 也會落在股票／基金或積極成長。
+- 高風險投機與彩券視為不可行，另以「股票／基金」的 12% 估算三種替代方案：延長期間、增加本金、降低目標。
+- 彩券一級另外要求總報酬超過 100%，避免「1 個月賺 10%」這類短期目標年化後超過 100% 而被判成彩券。
+- 「各類標的試算」以每一級的年報酬率上限（2%、5%、8%、12%、20%）計算期滿金額與達標所需時間；高風險投機與彩券沒有可預期的報酬率，不列入。
+- 這些報酬率是假設值，頁面上也註明不是個人化的投資建議。
 | 房貸預設（1000 萬、2.2%、30 年、本息平均） | 月付 $37,970、利息總額 $3,669,232 |
 | 房貸＋第 25 期起 2.5% | 利息總額 $4,156,549 |
 | 房貸＋第 25 期提前還 100 萬，縮短年限 | 26 年 2 個月還清，省 $770,918 |
