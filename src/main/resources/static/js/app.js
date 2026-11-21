@@ -360,20 +360,30 @@
   /* ---------- 投資計畫 ---------- */
   //需要的報酬率極端時（ex. 1 個月要 100 倍）不顯示一長串數字
   const MAX_SHOWN_RATIO = 100;
-  const MAX_SHOWN_MONTHS = 1200;
   const planRate = (ratio) => (ratio > MAX_SHOWN_RATIO ? `超過 ${percentFormat.format(MAX_SHOWN_RATIO)}` : fmt.percentFixed(ratio));
-  const planTerm = (months) => {
-    if (!months) return NO_VALUE;
-    return months > MAX_SHOWN_MONTHS ? '超過 100 年' : fmt.term(months);
-  };
 
   const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-  /** 建議規則表由 /api/meta 提供，與後端判斷用的是同一份規則 */
-  function fillTiers(tiers) {
-    $('tbody[data-tiers]').innerHTML = (tiers || []).map((t) =>
-      `<tr data-tier="${escapeHtml(t.code)}"><th scope="row">${escapeHtml(t.condition)}</th><td>${escapeHtml(t.label)}</td>`
-      + `<td>${escapeHtml(t.instruments)}</td><td>${escapeHtml(t.risk)}</td><td>${escapeHtml(t.horizon)}</td><td>${escapeHtml(t.note)}</td></tr>`).join('');
+  const FIT_TAGS = {
+    COMFORTABLE: ['一般行情可達成', ''],
+    STRETCH: ['需行情較好', ' option__tag--warn'],
+  };
+
+  /** 一個方案的卡片：適合程度、標的、風險、兩種行情的期滿金額 */
+  function optionCard(o, twd, tier) {
+    const [fitText, fitClass] = FIT_TAGS[o.fit] || [tier === 'LOTTERY' ? '不可行' : '可能不可行', ' option__tag--danger'];
+    const tags = `<span class="option__tag${fitClass}">${fitText}</span>`
+      + (o.horizonOk ? '' : '<span class="option__tag option__tag--warn">期間短於建議</span>');
+    const projection = o.typicalRate == null ? '' : '<ul class="option__projection">'
+      + '<li class="option__projection-head"><span>年報酬率假設</span><span>期滿金額（約）</span><span></span></li>'
+      + `<li><span>一般行情 ${fmt.percentFixed(o.typicalRate)}</span><span>${twd(o.typicalEnd)}</span>`
+      + `${o.typicalReached ? '<span class="is-reached">達標</span>' : '<span class="is-short">未達標</span>'}</li>`
+      + `<li><span>行情好 ${fmt.percentFixed(o.maxRate)}</span><span>${twd(o.maxEnd)}</span><span class="is-reached">達標</span></li></ul>`;
+    return `<section class="option" data-fit="${escapeHtml(o.fit)}">`
+      + `<div class="option__head"><h3 class="option__name">${escapeHtml(o.name)}</h3>${tags}</div>`
+      + `<p class="option__instruments">${escapeHtml(o.instruments)}</p>`
+      + `<dl class="option__facts"><div><dt>風險</dt><dd>${escapeHtml(o.risk)}</dd></div><div><dt>建議期間</dt><dd>${escapeHtml(o.horizon)}</dd></div></dl>`
+      + `${projection}<p class="option__note">${escapeHtml(o.note)}</p></section>`;
   }
 
   function renderPlan(d, scope) {
@@ -392,30 +402,32 @@
     setOut(scope, 'target', twd(d.target));
     setOut(scope, 'totalReturn', planRate(d.totalReturn));
     setOut(scope, 'requiredRate', planRate(d.requiredRate));
-    setOut(scope, 'risk', d.risk);
     setOut(scope, 'tierName', d.tierName);
     setOut(scope, 'verdict', verdict);
     setOut(scope, 'summary', d.summary);
-    setOut(scope, 'instruments', d.instruments);
-    setOut(scope, 'horizon', d.horizon);
-    setOut(scope, 'note', d.note);
     $('[data-advice]', scope).dataset.level = level;
+    $('[data-options]', scope).innerHTML = d.options.map((o) => optionCard(o, twd, d.tier)).join('');
+
+    const allocation = d.allocation;
+    $('[data-allocation]', scope).hidden = !allocation;
+    if (allocation) {
+      //CSP 不允許 HTML 裡的 style 屬性，寬度改由 CSSOM 設定
+      $('[data-allocation-bar]', scope).replaceChildren(...allocation.parts.map((p) => {
+        const segment = document.createElement('span');
+        segment.style.width = `${Number(p.percent)}%`;
+        return segment;
+      }));
+      setOut(scope, 'allocationParts', allocation.parts.map((p) => `${p.name} ${p.percent}%`).join('　＋　'));
+      setOut(scope, 'allocationText', `${allocation.text}期滿約 ${twd(allocation.endAmount)}。`);
+    }
+
     $('[data-items="warnings"]', scope).innerHTML = d.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('');
     $('[data-items="suggestions"]', scope).innerHTML = d.suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
     $('[data-suggestions]', scope).hidden = d.suggestions.length === 0;
 
-    $('tbody[data-scenarios]', scope).innerHTML = d.scenarios.map((r) => {
-      const current = r[0] === d.tier ? ' class="is-current"' : '';
-      const reached = r[5] ? '<td class="is-accent">達成</td>' : '<td class="is-muted">未達成</td>';
-      return `<tr${current}><th scope="row">${escapeHtml(r[1])}</th><td>${fmt.percentFixed(r[2])}</td><td>${twd(r[3])}</td><td>${twd(r[4])}</td>`
-        + `${reached}<td>${planTerm(r[6])}</td></tr>`;
-    }).join('');
-
     setOut(scope, 'rowsCaption', `以年化 ${planRate(d.requiredRate)} 計算，共 ${fmt.term(d.months)}`);
     $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
       `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td><td>${twd(r[2])}</td><td>${planRate(r[3])}</td></tr>`).join('');
-
-    $$('tbody[data-tiers] tr', scope).forEach((row) => row.classList.toggle('is-current', row.dataset.tier === d.tier));
   }
 
   /* ---------- 房貸計算 ---------- */
@@ -660,7 +672,6 @@
       });
     }
     fillSelects(meta);
-    fillTiers(meta.investmentTiers);
     if (meta.version) $('[data-version]').textContent = `v${meta.version}`;
 
     pages.compound = new Calculator('compound', { render: renderCompound });

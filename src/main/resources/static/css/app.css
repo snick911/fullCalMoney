@@ -489,9 +489,7 @@ select.input option { background: var(--surface); color: var(--fg); }
 .advice[data-level="warn"] { border-left-color: var(--warn); }
 .advice[data-level="danger"] { border-left-color: var(--danger); }
 .advice__head { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .75rem; }
-.advice__label { width: 100%; color: var(--muted); font-size: .8125rem; font-weight: 700; }
-.advice__title { margin: 0; font-size: 1.3rem; color: var(--accent); }
-.advice[data-level="danger"] .advice__title { color: var(--danger); }
+.advice__title { margin: 0; font-size: 1.125rem; }
 .advice__verdict {
   padding: .1rem .65rem; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent); font-size: .8125rem; font-weight: 700;
@@ -499,31 +497,53 @@ select.input option { background: var(--surface); color: var(--fg); }
 .advice[data-level="warn"] .advice__verdict { background: var(--warn-bg); color: var(--warn); }
 .advice[data-level="danger"] .advice__verdict { background: var(--danger-bg); color: var(--danger); }
 .advice__summary { margin: .65rem 0 0; font-weight: 600; }
-.advice__facts {
-  display: grid; gap: .6rem 1rem; margin: .85rem 0 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-}
-.advice__facts div { padding: .55rem .75rem; border-radius: 9px; background: var(--stripe); }
-.advice__facts dt { color: var(--muted); font-size: .8125rem; font-weight: 700; }
-.advice__facts dd { margin: .1rem 0 0; }
-.advice__note { margin: .85rem 0 0; color: var(--muted); font-size: .9375rem; }
-.advice__sub { margin: .9rem 0 0; font-size: .9375rem; }
+.advice__sub { margin: 1rem 0 0; font-size: .9375rem; }
 .advice__list { margin: .5rem 0 0; padding-left: 1.25rem; }
 .advice__list:empty { display: none; }
 .advice__list li + li { margin-top: .3rem; }
-.advice__list--warn { margin-top: .75rem; color: var(--warn); font-weight: 600; }
+.advice__list--warn { margin-top: .9rem; color: var(--warn); font-weight: 600; }
 
-/* 目前建議的那一列 */
-.data-table tbody tr.is-current > * { background: var(--accent-soft); }
-.data-table tbody tr.is-current > :first-child { box-shadow: inset 3px 0 0 var(--accent); }
-.data-table .is-muted { color: var(--muted); }
-/* 規則表文字較長，允許換行 */
-.data-table--rules th, .data-table--rules td { text-align: left; white-space: normal; vertical-align: top; }
-.data-table--rules tr > :first-child { text-align: left; min-width: 9rem; }
-.data-table--rules td:nth-child(2), .data-table--rules td:nth-child(4), .data-table--rules td:nth-child(5) { white-space: nowrap; }
-.data-table--rules td:nth-child(3) { min-width: 12rem; }
-.data-table--rules td:last-child { min-width: 18rem; color: var(--muted); }
-.data-table--rules tbody th { background: var(--surface); color: var(--fg); font-weight: 700; }
+/* 可考慮的方案：每類標的一張卡片 */
+.options {
+  display: grid; gap: .75rem; margin-top: .9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  align-items: start;
+}
+.option {
+  display: flex; flex-direction: column; gap: .5rem; min-width: 0;
+  padding: .8rem .9rem .85rem;
+  border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 11px; background: var(--stripe);
+}
+.option[data-fit="STRETCH"] { border-top-color: var(--warn); }
+.option[data-fit="INFEASIBLE"] { border-top-color: var(--danger); }
+.option__head { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; }
+.option__name { margin: 0 .25rem 0 0; font-size: 1.0625rem; }
+.option__tag {
+  padding: .05rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+}
+.option__tag--warn { background: var(--warn-bg); color: var(--warn); }
+.option__tag--danger { background: var(--danger-bg); color: var(--danger); }
+.option__instruments { margin: 0; font-weight: 600; }
+.option__facts { display: flex; flex-wrap: wrap; gap: .2rem 1.25rem; margin: 0; font-size: .875rem; }
+.option__facts div { display: flex; gap: .4rem; }
+.option__facts dt { color: var(--muted); }
+.option__facts dd { margin: 0; font-weight: 600; }
+.option__projection { list-style: none; margin: 0; padding: .45rem .6rem; border-radius: 9px; background: var(--surface); font-size: .875rem; }
+.option__projection li { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: baseline; font-variant-numeric: tabular-nums; }
+.option__projection li + li { margin-top: .2rem; }
+.option__projection span:nth-child(2) { text-align: right; }
+.option__projection-head { color: var(--muted); font-size: .75rem; }
+.option__note { margin: 0; color: var(--muted); font-size: .8125rem; }
+.is-reached { color: var(--accent); font-weight: 700; }
+.is-short { color: var(--muted); }
+
+/* 配置建議：兩類標的的比例條 */
+.allocation__bar { display: flex; height: .75rem; margin-top: .55rem; border-radius: 999px; overflow: hidden; background: var(--stripe); }
+.allocation__bar span:first-child { background: color-mix(in srgb, var(--accent) 40%, var(--surface)); }
+.allocation__bar span:last-child { background: var(--accent); }
+.allocation__parts { margin: .45rem 0 0; font-weight: 700; }
+.allocation__text { margin: .2rem 0 0; color: var(--muted); font-size: .9375rem; }
 
 /* 新台幣債券不顯示換回台幣的欄位 */
 .page.is-domestic [data-foreign] { display: none; }

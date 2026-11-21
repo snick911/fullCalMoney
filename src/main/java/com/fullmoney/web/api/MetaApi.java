@@ -8,7 +8,6 @@ import java.util.Map;
 import com.fullmoney.AppVersion;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
-import com.fullmoney.bean.InvestmentTier;
 import com.fullmoney.bean.PrepaymentMode;
 import com.fullmoney.bean.RepaymentMethod;
 import com.fullmoney.web.ApiEndpoint;
@@ -47,16 +46,6 @@ public final class MetaApi extends ApiEndpoint {
 		for (PrepaymentMode mode : PrepaymentMode.values()) {
 			modes.add(option(mode.name(), mode.getLabel(), null, null));
 		}
-		//投資計畫的建議規則表
-		List<Map<String, Object>> tiers = new ArrayList<>();
-		for (InvestmentTier tier : InvestmentTier.values()) {
-			Map<String, Object> row = option(tier.name(), tier.getName(), "condition", tier.getCondition());
-			row.put("instruments", tier.getInstruments());
-			row.put("risk", tier.getRisk());
-			row.put("horizon", tier.getHorizon());
-			row.put("note", tier.getNote());
-			tiers.add(row);
-		}
 
 		Map<String, Object> meta = new LinkedHashMap<>();
 		meta.put("name", AppVersion.NAME);
@@ -65,7 +54,6 @@ public final class MetaApi extends ApiEndpoint {
 		meta.put("frequencies", frequencies);
 		meta.put("repaymentMethods", methods);
 		meta.put("prepaymentModes", modes);
-		meta.put("investmentTiers", tiers);
 		return meta;
 	}
 

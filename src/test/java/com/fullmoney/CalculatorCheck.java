@@ -235,7 +235,22 @@ public final class CalculatorCheck {
 		check("plan needs period", true, plan("years=0&months=0&profit=1").contains("\"field\":\"years\""));
 		check("plan tier boundaries", "DEPOSIT BOND SPECULATIVE LOTTERY", InvestmentPlanner.tierOf(0.02, 0.1) + " " + InvestmentPlanner.tierOf(0.020001, 0.1)
 				+ " " + InvestmentPlanner.tierOf(1.5, 0.5) + " " + InvestmentPlanner.tierOf(1.5, 1.5));
-		check("meta investment tiers", true, call("/api/meta", "").contains("\"investmentTiers\":[{\"code\":\"DEPOSIT\""));
+
+		//可達成的方案：從風險最低的往上列到第一個一般行情可達成的，再多列一類，最多 3 個
+		String bondOrStock = plan("years=5&months=0&profit=250000");
+		check("plan options bond or stock", "BOND BALANCED STOCK", optionCodes(bondOrStock));
+		check("plan allocation bond 60 stock 40", true, bondOrStock.contains("{\"code\":\"BOND\",\"name\":\"債券\",\"percent\":60},{\"code\":\"STOCK\"")
+				&& bondOrStock.contains("\"rate\":0.0490000000"));
+		check("plan options long horizon", "STOCK AGGRESSIVE", optionCodes(plan("years=10&months=0&profit=1500000")));
+		String small = plan("years=5&months=0&profit=51010");
+		check("plan options small target", "DEPOSIT BOND", optionCodes(small));
+		check("plan small target no allocation", true, small.contains("\"allocation\":null"));
+		check("plan zero profit only deposit", "DEPOSIT", optionCodes(plan("years=3&months=6&profit=0")));
+		String shortBond = plan("years=2&months=0&profit=93330");
+		check("plan short horizon options capped", "BOND BALANCED STOCK", optionCodes(shortBond));
+		check("plan short horizon stock flagged", true, shortBond.contains("\"code\":\"STOCK\",\"name\":\"股票／基金\",\"fit\":\"COMFORTABLE\",\"horizonOk\":false"));
+		check("plan speculative single option", "SPECULATIVE", optionCodes(doubled));
+		check("plan speculative no allocation", true, doubled.contains("\"allocation\":null"));
 		check("numbers group negative", "-1,234,567.5", Numbers.group(new BigDecimal("-1234567.50"), 2));
 		check("numbers group small", "0.0001", Numbers.group(new BigDecimal("0.0001"), 4));
 		check("numbers group billion", "1,000,000,000", Numbers.group(new BigDecimal("1000000000"), 4));
@@ -247,6 +262,17 @@ public final class CalculatorCheck {
 
 	private static String plan(String query) {
 		return call("/api/plan", "principal=1%2C000%2C000&" + query);
+	}
+
+	/** 投資計畫回應中 options 的類別代碼，以空白分隔 */
+	private static String optionCodes(String json) {
+		String options = json.substring(json.indexOf("\"options\":"), json.indexOf("\"allocation\":"));
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"code\":\"([A-Z]+)\"").matcher(options);
+		StringBuilder codes = new StringBuilder();
+		while (matcher.find()) {
+			codes.append(codes.length() == 0 ? "" : " ").append(matcher.group(1));
+		}
+		return codes.toString();
 	}
 
 	private static String call(String path, String query) {
