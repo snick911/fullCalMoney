@@ -485,7 +485,7 @@
   <section class="page" id="page-plan" data-page="plan" aria-labelledby="h-plan" hidden>
     <div class="page__head">
       <h1 id="h-plan">投資計畫</h1>
-      <p class="page__desc">輸入本金、投資期間與期望獲利，算出每年需要的報酬率，列出可以達成的投資方案與配置建議。</p>
+      <p class="page__desc">輸入本金、每月投資金額、投資期間與期望獲利，算出每年需要的報酬率，列出可以達成的投資方案與配置建議。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/plan">
@@ -500,6 +500,11 @@
           <span class="field__hint" data-hint></span>
         </div>
         <div class="field">
+          <label for="p-monthly">每月固定投資金額</label>
+          <div class="input-wrap"><input class="input" id="p-monthly" name="monthlyFixed" data-kind="money" inputmode="numeric" value="10,000"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-hint></span>
+        </div>
+        <div class="field">
           <label for="p-years">投資年數</label>
           <div class="input-wrap"><input class="input" id="p-years" name="years" inputmode="numeric" value="5"><span class="input-affix">年</span></div>
         </div>
@@ -509,9 +514,27 @@
         </div>
         <div class="field">
           <label for="p-profit">期望獲利金額</label>
-          <div class="input-wrap"><input class="input" id="p-profit" name="profit" data-kind="money" inputmode="numeric" value="250,000"><span class="input-affix">元</span></div>
+          <div class="input-wrap"><input class="input" id="p-profit" name="profit" data-kind="money" inputmode="numeric" value="350,000"><span class="input-affix">元</span></div>
           <span class="field__hint" data-hint></span>
         </div>
+      </div>
+      <div class="ranges ranges--narrow">
+        <fieldset class="range">
+          <legend>每月浮動投資金額 <span class="range__hint">（每月不固定的部分，以中間值估算）</span></legend>
+          <div class="range__inputs">
+            <div class="field">
+              <label for="p-float-min">最低</label>
+              <div class="input-wrap"><input class="input" id="p-float-min" name="floatMin" data-kind="money" inputmode="numeric" value="0"><span class="input-affix">元</span></div>
+              <span class="field__hint" data-hint></span>
+            </div>
+            <span class="range__sep" aria-hidden="true">～</span>
+            <div class="field">
+              <label for="p-float-max">最高</label>
+              <div class="input-wrap"><input class="input" id="p-float-max" name="floatMax" data-kind="money" inputmode="numeric" value="5,000"><span class="input-affix">元</span></div>
+              <span class="field__hint" data-hint></span>
+            </div>
+          </div>
+        </fieldset>
       </div>
       <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
@@ -520,6 +543,7 @@
     <div class="results" data-results>
       <div class="tiles">
         <div class="tile"><span class="tile__label">目標金額</span><span class="tile__value" data-out="target">—</span></div>
+        <div class="tile"><span class="tile__label">總投入金額</span><span class="tile__value" data-out="invested">—</span></div>
         <div class="tile"><span class="tile__label">總報酬率</span><span class="tile__value" data-out="totalReturn">—</span></div>
         <div class="tile tile--primary"><span class="tile__label">需要的年化報酬率</span><span class="tile__value" data-out="requiredRate">—</span></div>
         <div class="tile"><span class="tile__label">風險最低的方案</span><span class="tile__value" data-out="tierName">—</span></div>
@@ -531,6 +555,15 @@
           <span class="advice__verdict" data-out="verdict"></span>
         </div>
         <p class="advice__summary" data-out="summary"></p>
+        <section data-floating hidden>
+          <h3 class="advice__sub">每月浮動投資的影響</h3>
+          <div class="table-wrap table-wrap--auto spread" tabindex="0" aria-label="每月浮動投資的影響，可捲動">
+            <table class="data-table data-table--summary">
+              <thead><tr><th scope="col">情況</th><th scope="col">每月投資</th><th scope="col">總投入</th><th scope="col">需要的年化報酬率</th><th scope="col">風險最低的方案</th></tr></thead>
+              <tbody data-floating-rows></tbody>
+            </table>
+          </div>
+        </section>
         <div class="options" data-options></div>
         <section class="allocation" data-allocation hidden>
           <h3 class="advice__sub">配置建議</h3>
@@ -552,12 +585,12 @@
         </div>
         <div class="table-wrap" tabindex="0" aria-label="逐年試算，可捲動">
           <table class="data-table">
-            <thead><tr><th scope="col">期間</th><th scope="col">金額</th><th scope="col">累積獲利</th><th scope="col">累積報酬率</th></tr></thead>
+            <thead><tr><th scope="col">期間</th><th scope="col">累積投入</th><th scope="col">金額</th><th scope="col">累積獲利</th><th scope="col">累積報酬率</th></tr></thead>
             <tbody data-rows></tbody>
           </table>
         </div>
       </div>
-      <p class="note">需要的年化報酬率 =（目標金額 ÷ 本金）^（1 ÷ 年數）− 1。各類標的的「一般行情」與「行情好」報酬率都是假設值，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
+      <p class="note">本金在第 1 個月初投入，每月投資在每月月初投入；需要的年化報酬率是讓期滿金額剛好等於「總投入 + 期望獲利」的報酬率（逐月複利）。各類標的的「一般行情」與「行情好」報酬率都是假設值，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
     </div>
   </section>
 </main>

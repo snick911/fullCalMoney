@@ -231,7 +231,7 @@ public final class CalculatorCheck {
 		String shortStock = plan("years=3&months=0&profit=400000");
 		check("plan short horizon warns", true, shortStock.contains("\"tier\":\"STOCK\"") && shortStock.contains("\"feasible\":true")
 				&& shortStock.contains("短於"));
-		check("plan last row is target", true, plan("years=2&months=6&profit=250000").contains("[30,1250000.00,250000.00,"));
+		check("plan last row is target", true, plan("years=2&months=6&profit=250000").contains("[30,1000000.00,1250000.00,250000.00,"));
 		check("plan needs period", true, plan("years=0&months=0&profit=1").contains("\"field\":\"years\""));
 		check("plan tier boundaries", "DEPOSIT BOND SPECULATIVE LOTTERY", InvestmentPlanner.tierOf(0.02, 0.1) + " " + InvestmentPlanner.tierOf(0.020001, 0.1)
 				+ " " + InvestmentPlanner.tierOf(1.5, 0.5) + " " + InvestmentPlanner.tierOf(1.5, 1.5));
@@ -251,6 +251,26 @@ public final class CalculatorCheck {
 		check("plan short horizon stock flagged", true, shortBond.contains("\"code\":\"STOCK\",\"name\":\"股票／基金\",\"fit\":\"COMFORTABLE\",\"horizonOk\":false"));
 		check("plan speculative single option", "SPECULATIVE", optionCodes(doubled));
 		check("plan speculative no allocation", true, doubled.contains("\"allocation\":null"));
+
+		//每月投資：以二分法求出的報酬率，期滿金額要剛好等於總投入 + 期望獲利
+		double monthlyRate = InvestmentPlanner.requiredRate(0, 10000, 120, 500000);
+		check("plan solver hits target", true, Math.abs(InvestmentPlanner.futureValue(0, 10000, monthlyRate, 120) - 1700000) < 0.01);
+		check("plan solver no monthly = formula", true, Math.abs(InvestmentPlanner.requiredRate(1000000, 0, 60, 250000) - (Math.pow(1.25, 0.2) - 1)) < 1e-12);
+		String monthlyOnly = call("/api/plan", "principal=0&monthlyFixed=10%2C000&years=10&months=0&profit=500%2C000");
+		check("plan monthly only", true, monthlyOnly.contains("\"invested\":1200000.00,") && monthlyOnly.contains("\"requiredRate\":0.0677440000,")
+				&& monthlyOnly.contains("\"tier\":\"BALANCED\""));
+		String ranged = call("/api/plan", "principal=1%2C000%2C000&monthlyFixed=10%2C000&floatMin=0&floatMax=5%2C000&years=5&months=0&profit=400%2C000&round=1");
+		check("plan floating expected midpoint", true, ranged.contains("\"monthly\":12500,\"invested\":1750000,"));
+		check("plan floating high and low", true, ranged.contains("\"high\":{\"monthly\":15000,\"invested\":1900000,\"rate\":0.0502740000,")
+				&& ranged.contains("\"low\":{\"monthly\":10000,\"invested\":1600000,\"rate\":0.0554440000,"));
+		String floatOnly = call("/api/plan", "principal=0&floatMin=0&floatMax=5%2C000&years=1&months=0&profit=1%2C000&round=1");
+		check("plan floating low case empty", true, floatOnly.contains("\"low\":{\"monthly\":0,\"invested\":0,\"rate\":null,")
+				&& floatOnly.contains("\"lowCaseOk\":false") && floatOnly.contains("沒有投入任何資金"));
+		check("plan floating range order", true, call("/api/plan", "principal=1&floatMin=5000&floatMax=1000&years=1&months=0&profit=1")
+				.contains("\"field\":\"floatMax\""));
+		check("plan needs money", true, call("/api/plan", "principal=0&years=1&months=0&profit=1").contains("\"field\":\"principal\""));
+		check("plan infeasible monthly suggestion", true, call("/api/plan", "principal=1%2C000%2C000&monthlyFixed=5%2C000&years=2&months=0&profit=1%2C000%2C000")
+				.contains("增加每月投資"));
 		check("numbers group negative", "-1,234,567.5", Numbers.group(new BigDecimal("-1234567.50"), 2));
 		check("numbers group small", "0.0001", Numbers.group(new BigDecimal("0.0001"), 4));
 		check("numbers group billion", "1,000,000,000", Numbers.group(new BigDecimal("1000000000"), 4));

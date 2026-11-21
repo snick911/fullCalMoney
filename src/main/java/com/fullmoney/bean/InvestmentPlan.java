@@ -5,6 +5,9 @@ import java.util.List;
 
 /**
  * 投資計畫試算結果
+ *
+ * <p>投入方式：本金在第 1 個月初投入一次，之後每月月初投入「每月固定投資金額 + 每月浮動投資金額」。
+ * 浮動金額為區間，預期情況取中間值，另外計算只投入下限與投入上限的情況。</p>
  */
 public class InvestmentPlan {
 
@@ -18,19 +21,25 @@ public class InvestmentPlan {
 		INFEASIBLE
 	}
 
-	/** 逐年試算的一列：第 months 個月底的金額 */
+	/** 逐年試算的一列：第 months 個月底的累積投入與金額 */
 	public static final class Row {
 
 		private final int months;
+		private final BigDecimal invested;
 		private final BigDecimal balance;
 
-		public Row(int months, BigDecimal balance) {
+		public Row(int months, BigDecimal invested, BigDecimal balance) {
 			this.months = months;
+			this.invested = invested;
 			this.balance = balance;
 		}
 
 		public int getMonths() {
 			return months;
+		}
+
+		public BigDecimal getInvested() {
+			return invested;
 		}
 
 		public BigDecimal getBalance() {
@@ -44,13 +53,15 @@ public class InvestmentPlan {
 		private final InvestmentTier tier;
 		private final Fit fit;
 		private final boolean horizonOk;
+		private final boolean lowCaseOk;
 		private final BigDecimal typicalEnd;
 		private final BigDecimal maxEnd;
 
-		public Option(InvestmentTier tier, Fit fit, boolean horizonOk, BigDecimal typicalEnd, BigDecimal maxEnd) {
+		public Option(InvestmentTier tier, Fit fit, boolean horizonOk, boolean lowCaseOk, BigDecimal typicalEnd, BigDecimal maxEnd) {
 			this.tier = tier;
 			this.fit = fit;
 			this.horizonOk = horizonOk;
+			this.lowCaseOk = lowCaseOk;
 			this.typicalEnd = typicalEnd;
 			this.maxEnd = maxEnd;
 		}
@@ -66,6 +77,11 @@ public class InvestmentPlan {
 		/** 投資期間是否達到此類標的建議的年數 */
 		public boolean isHorizonOk() {
 			return horizonOk;
+		}
+
+		/** 每月浮動投資只投入下限時，行情好是否仍能達成；沒有浮動區間時為 true */
+		public boolean isLowCaseOk() {
+			return lowCaseOk;
 		}
 
 		/** 以一般行情報酬率計算的期滿金額，沒有可預期報酬率時為 null */
@@ -126,7 +142,45 @@ public class InvestmentPlan {
 		}
 	}
 
+	/** 每月浮動投資取某一端時需要的年化報酬率 */
+	public static final class Case {
+
+		private final BigDecimal monthly;
+		private final BigDecimal invested;
+		private final BigDecimal rate;
+		private final InvestmentTier tier;
+
+		public Case(BigDecimal monthly, BigDecimal invested, BigDecimal rate, InvestmentTier tier) {
+			this.monthly = monthly;
+			this.invested = invested;
+			this.rate = rate;
+			this.tier = tier;
+		}
+
+		/** 每月合計投資金額（固定 + 浮動） */
+		public BigDecimal getMonthly() {
+			return monthly;
+		}
+
+		/** 總投入金額 */
+		public BigDecimal getInvested() {
+			return invested;
+		}
+
+		/** 需要的年化報酬率，沒有投入任何資金時為 null */
+		public BigDecimal getRate() {
+			return rate;
+		}
+
+		/** 風險最低、有機會達成的類別，沒有投入任何資金時為 null */
+		public InvestmentTier getTier() {
+			return tier;
+		}
+	}
+
 	private BigDecimal principal;
+	private BigDecimal monthly;
+	private BigDecimal invested;
 	private BigDecimal profit;
 	private BigDecimal target;
 	private int months;
@@ -134,6 +188,8 @@ public class InvestmentPlan {
 	private BigDecimal multiple;
 	private BigDecimal requiredRate;
 	private InvestmentTier tier;
+	private Case lowCase;
+	private Case highCase;
 	private List<Option> options;
 	private Allocation allocation;
 	private List<Row> rows;
@@ -142,6 +198,7 @@ public class InvestmentPlan {
 	private InvestmentTier benchmark;
 	private int benchmarkMonths;
 	private BigDecimal benchmarkPrincipal;
+	private BigDecimal benchmarkMonthly;
 	private BigDecimal benchmarkProfit;
 
 	public BigDecimal getPrincipal() {
@@ -152,6 +209,24 @@ public class InvestmentPlan {
 		this.principal = principal;
 	}
 
+	/** 預期每月投資金額 = 每月固定 + 浮動區間的中間值 */
+	public BigDecimal getMonthly() {
+		return monthly;
+	}
+
+	public void setMonthly(BigDecimal monthly) {
+		this.monthly = monthly;
+	}
+
+	/** 預期總投入金額 = 本金 + 每月投資 × 月數 */
+	public BigDecimal getInvested() {
+		return invested;
+	}
+
+	public void setInvested(BigDecimal invested) {
+		this.invested = invested;
+	}
+
 	public BigDecimal getProfit() {
 		return profit;
 	}
@@ -160,7 +235,7 @@ public class InvestmentPlan {
 		this.profit = profit;
 	}
 
-	/** 目標金額 = 本金 + 期望獲利 */
+	/** 目標金額 = 總投入 + 期望獲利 */
 	public BigDecimal getTarget() {
 		return target;
 	}
@@ -178,7 +253,7 @@ public class InvestmentPlan {
 		this.months = months;
 	}
 
-	/** 總報酬率 = 期望獲利 / 本金 ex. 0.25 */
+	/** 總報酬率 = 期望獲利 / 總投入 ex. 0.25 */
 	public BigDecimal getTotalReturn() {
 		return totalReturn;
 	}
@@ -187,7 +262,7 @@ public class InvestmentPlan {
 		this.totalReturn = totalReturn;
 	}
 
-	/** 目標金額是本金的幾倍 */
+	/** 目標金額是總投入的幾倍 */
 	public BigDecimal getMultiple() {
 		return multiple;
 	}
@@ -196,7 +271,7 @@ public class InvestmentPlan {
 		this.multiple = multiple;
 	}
 
-	/** 需要的年化報酬率 ex. 0.0456 */
+	/** 預期情況需要的年化報酬率 ex. 0.0456 */
 	public BigDecimal getRequiredRate() {
 		return requiredRate;
 	}
@@ -212,6 +287,24 @@ public class InvestmentPlan {
 
 	public void setTier(InvestmentTier tier) {
 		this.tier = tier;
+	}
+
+	/** 每月浮動投資只投入下限的情況，沒有浮動區間時為 null */
+	public Case getLowCase() {
+		return lowCase;
+	}
+
+	public void setLowCase(Case lowCase) {
+		this.lowCase = lowCase;
+	}
+
+	/** 每月浮動投資投入上限的情況，沒有浮動區間時為 null */
+	public Case getHighCase() {
+		return highCase;
+	}
+
+	public void setHighCase(Case highCase) {
+		this.highCase = highCase;
 	}
 
 	/** 可考慮的方案，由低風險到高風險 */
@@ -240,7 +333,7 @@ public class InvestmentPlan {
 		this.rows = rows;
 	}
 
-	/** 投資期間短於風險最低方案的建議年數時，延長到建議年數後需要的年化報酬率；期間足夠時為 null */
+	/** 投資期間短於風險最低方案的建議年數時，延長到建議年數（每月照常投入）後需要的年化報酬率；期間足夠時為 null */
 	public BigDecimal getExtendedRate() {
 		return extendedRate;
 	}
@@ -266,7 +359,7 @@ public class InvestmentPlan {
 		this.benchmark = benchmark;
 	}
 
-	/** 以比較基準的一般行情報酬率，達到目標需要的月數 */
+	/** 以比較基準的一般行情報酬率、每月照常投入，達到期望獲利需要的月數；超過上限時為 -1 */
 	public int getBenchmarkMonths() {
 		return benchmarkMonths;
 	}
@@ -275,7 +368,7 @@ public class InvestmentPlan {
 		this.benchmarkMonths = benchmarkMonths;
 	}
 
-	/** 以比較基準的一般行情報酬率，同期間達到期望獲利需要的本金 */
+	/** 以比較基準的一般行情報酬率，每月投資不變、同期間達到期望獲利需要的本金 */
 	public BigDecimal getBenchmarkPrincipal() {
 		return benchmarkPrincipal;
 	}
@@ -284,7 +377,16 @@ public class InvestmentPlan {
 		this.benchmarkPrincipal = benchmarkPrincipal;
 	}
 
-	/** 以比較基準的一般行情報酬率，同本金、同期間可期待的獲利 */
+	/** 以比較基準的一般行情報酬率，本金不變、同期間達到期望獲利需要的每月投資金額 */
+	public BigDecimal getBenchmarkMonthly() {
+		return benchmarkMonthly;
+	}
+
+	public void setBenchmarkMonthly(BigDecimal benchmarkMonthly) {
+		this.benchmarkMonthly = benchmarkMonthly;
+	}
+
+	/** 以比較基準的一般行情報酬率，同本金、同每月投資、同期間可期待的獲利 */
 	public BigDecimal getBenchmarkProfit() {
 		return benchmarkProfit;
 	}

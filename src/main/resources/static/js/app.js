@@ -373,7 +373,8 @@
   function optionCard(o, twd, tier) {
     const [fitText, fitClass] = FIT_TAGS[o.fit] || [tier === 'LOTTERY' ? '不可行' : '可能不可行', ' option__tag--danger'];
     const tags = `<span class="option__tag${fitClass}">${fitText}</span>`
-      + (o.horizonOk ? '' : '<span class="option__tag option__tag--warn">期間短於建議</span>');
+      + (o.horizonOk ? '' : '<span class="option__tag option__tag--warn">期間短於建議</span>')
+      + (o.lowCaseOk ? '' : '<span class="option__tag option__tag--warn">浮動投資只投入下限時不足</span>');
     const projection = o.typicalRate == null ? '' : '<ul class="option__projection">'
       + '<li class="option__projection-head"><span>年報酬率假設</span><span>期滿金額（約）</span><span></span></li>'
       + `<li><span>一般行情 ${fmt.percentFixed(o.typicalRate)}</span><span>${twd(o.typicalEnd)}</span>`
@@ -400,12 +401,27 @@
     }
 
     setOut(scope, 'target', twd(d.target));
+    setOut(scope, 'invested', twd(d.invested));
     setOut(scope, 'totalReturn', planRate(d.totalReturn));
     setOut(scope, 'requiredRate', planRate(d.requiredRate));
     setOut(scope, 'tierName', d.tierName);
     setOut(scope, 'verdict', verdict);
     setOut(scope, 'summary', d.summary);
     $('[data-advice]', scope).dataset.level = level;
+
+    //每月浮動投資：投入上限、預期（中間值）、只投入下限三種情況
+    $('[data-floating]', scope).hidden = !d.floating;
+    if (d.floating) {
+      const cases = [
+        ['投入上限', d.floating.high, ''],
+        ['預期（中間值）', { monthly: d.monthly, invested: d.invested, rate: d.requiredRate, tierName: d.tierName }, ' class="is-expected"'],
+        ['只投入下限', d.floating.low, ''],
+      ];
+      $('tbody[data-floating-rows]', scope).innerHTML = cases.map(([label, c, attr]) =>
+        `<tr${attr}><th scope="row">${label}</th><td>${twd(c.monthly)}</td><td>${twd(c.invested)}</td>`
+        + `<td>${c.rate == null ? '沒有投入資金' : planRate(c.rate)}</td><td>${c.tierName == null ? NO_VALUE : escapeHtml(c.tierName)}</td></tr>`).join('');
+    }
+
     $('[data-options]', scope).innerHTML = d.options.map((o) => optionCard(o, twd, d.tier)).join('');
 
     const allocation = d.allocation;
@@ -427,7 +443,7 @@
 
     setOut(scope, 'rowsCaption', `以年化 ${planRate(d.requiredRate)} 計算，共 ${fmt.term(d.months)}`);
     $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
-      `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td><td>${twd(r[2])}</td><td>${planRate(r[3])}</td></tr>`).join('');
+      `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td><td>${twd(r[2])}</td><td>${twd(r[3])}</td><td>${planRate(r[4])}</td></tr>`).join('');
   }
 
   /* ---------- 房貸計算 ---------- */

@@ -19,9 +19,11 @@ import com.fullmoney.web.Params;
 /**
  * 投資計畫：算出需要的年化報酬率，列出可以達成的方案與配置建議
  *
- * <p>參數：principal 投資本金、years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數</p>
+ * <p>參數：principal 投資本金（可為 0）、monthlyFixed 每月固定投資金額、floatMin / floatMax 每月浮動投資金額的區間（三者選填，預設 0）、
+ * years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數</p>
  * <p>options 為可考慮的方案（由低風險到高風險），allocation 為兩類標的的配置建議（不需要時為 null），
- * rows 每列為 [第幾個月底, 金額, 累積獲利, 累積報酬率]</p>
+ * floating 為浮動投資取上限 high／下限 low 時的情況（沒有浮動區間時為 null），
+ * rows 每列為 [第幾個月底, 累積投入, 金額, 累積獲利, 累積報酬率]</p>
  */
 public final class PlanApi extends ApiEndpoint {
 
@@ -37,17 +39,26 @@ public final class PlanApi extends ApiEndpoint {
 
 	@Override
 	protected Object respond(Params params) {
-		BigDecimal principal = params.decimal("principal", "投資本金", "1", Values.MAX_MONEY);
+		BigDecimal principal = params.decimal("principal", "投資本金", "0", Values.MAX_MONEY);
+		BigDecimal monthlyFixed = params.optionalDecimal("monthlyFixed", "每月固定投資金額", "0", Values.MAX_MONEY, BigDecimal.ZERO);
+		BigDecimal floatMin = params.optionalDecimal("floatMin", "每月浮動投資金額的最低值", "0", Values.MAX_MONEY, BigDecimal.ZERO);
+		BigDecimal floatMax = params.optionalDecimal("floatMax", "每月浮動投資金額的最高值", "0", Values.MAX_MONEY, BigDecimal.ZERO);
 		int years = params.integer("years", "投資年數", 0, MAX_YEAR);
 		int extraMonths = params.integer("months", "月數", 0, MONTHS_PER_YEAR - 1);
 		BigDecimal profit = params.decimal("profit", "期望獲利金額", "0", MAX_PROFIT);
 		boolean whole = Values.wholeMoney(params);
 		int months = years * MONTHS_PER_YEAR + extraMonths;
+		if (floatMax.compareTo(floatMin) < 0) {
+			throw new BadRequestException("floatMax", "每月浮動投資金額的最高值不可小於最低值。");
+		}
 		if (months < 1) {
 			throw new BadRequestException("years", "投資期間至少 1 個月。");
 		}
+		if (principal.signum() == 0 && monthlyFixed.signum() == 0 && floatMax.signum() == 0) {
+			throw new BadRequestException("principal", "請輸入投資本金或每月投資金額。");
+		}
 
-		InvestmentPlan plan = planner.plan(principal, months, profit);
+		InvestmentPlan plan = planner.plan(principal, monthlyFixed, floatMin, floatMax, months, profit);
 		BigDecimal target = plan.getTarget();
 
 		List<Map<String, Object>> options = new ArrayList<>();
@@ -58,6 +69,7 @@ public final class PlanApi extends ApiEndpoint {
 			out.put("name", tier.getName());
 			out.put("fit", option.getFit().name());
 			out.put("horizonOk", option.isHorizonOk());
+			out.put("lowCaseOk", option.isLowCaseOk());
 			out.put("instruments", tier.getInstruments());
 			out.put("risk", tier.getRisk());
 			out.put("horizon", tier.getHorizon());
@@ -74,14 +86,23 @@ public final class PlanApi extends ApiEndpoint {
 
 		List<Object[]> rows = new ArrayList<>();
 		for (InvestmentPlan.Row row : plan.getRows()) {
-			BigDecimal gain = row.getBalance().subtract(principal);
-			rows.add(new Object[] { row.getMonths(), Values.money(row.getBalance(), whole), Values.money(gain, whole),
-					Values.ratio(gain.divide(principal, 10, RoundingMode.HALF_UP)) });
+			BigDecimal gain = row.getBalance().subtract(row.getInvested());
+			rows.add(new Object[] { row.getMonths(), Values.money(row.getInvested(), whole), Values.money(row.getBalance(), whole),
+					Values.money(gain, whole), Values.ratio(gain.divide(row.getInvested(), 10, RoundingMode.HALF_UP)) });
+		}
+
+		Map<String, Object> floating = null;
+		if (plan.getLowCase() != null) {
+			floating = new LinkedHashMap<>();
+			floating.put("high", floatingCase(plan.getHighCase(), whole));
+			floating.put("low", floatingCase(plan.getLowCase(), whole));
 		}
 
 		Map<String, Object> out = new LinkedHashMap<>();
 		out.put("decimals", Values.moneyDecimals(whole));
 		out.put("months", months);
+		out.put("monthly", Values.money(plan.getMonthly(), whole));
+		out.put("invested", Values.money(plan.getInvested(), whole));
 		out.put("target", Values.money(target, whole));
 		out.put("totalReturn", Values.ratio(plan.getTotalReturn()));
 		out.put("requiredRate", Values.ratio(plan.getRequiredRate()));
@@ -89,11 +110,23 @@ public final class PlanApi extends ApiEndpoint {
 		out.put("tierName", plan.getTier().getName());
 		out.put("feasible", plan.isFeasible());
 		out.put("summary", summary(plan));
+		out.put("floating", floating);
 		out.put("options", options);
 		out.put("allocation", allocation(plan.getAllocation(), whole));
 		out.put("warnings", warnings(plan));
 		out.put("suggestions", suggestions(plan));
 		out.put("rows", rows);
+		return out;
+	}
+
+	/** 每月浮動投資取某一端時的總投入與需要的年化報酬率；沒有投入任何資金時 rate 為 null */
+	private static Map<String, Object> floatingCase(InvestmentPlan.Case floatingCase, boolean whole) {
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("monthly", Values.money(floatingCase.getMonthly(), whole));
+		out.put("invested", Values.money(floatingCase.getInvested(), whole));
+		out.put("rate", floatingCase.getRate() == null ? null : Values.ratio(floatingCase.getRate()));
+		out.put("tier", floatingCase.getTier() == null ? null : floatingCase.getTier().name());
+		out.put("tierName", floatingCase.getTier() == null ? null : floatingCase.getTier().getName());
 		return out;
 	}
 
@@ -132,7 +165,7 @@ public final class PlanApi extends ApiEndpoint {
 			return "期望獲利為 0，只要保本即可，建議存放在" + InvestmentTier.DEPOSIT.getInstruments() + "。";
 		}
 		if (tier == InvestmentTier.LOTTERY) {
-			return "要在 " + period + " 內讓本金變成 " + Numbers.group(plan.getMultiple(), 2) + " 倍，需要的年化報酬率約 " + rate
+			return "要在 " + period + " 內讓投入的資金變成 " + Numbers.group(plan.getMultiple(), 2) + " 倍，需要的年化報酬率約 " + rate
 					+ "，任何投資都幾乎不可能達成，計畫不可行。真的想試試，只能買" + tier.getInstruments() + "碰運氣了。";
 		}
 		if (tier == InvestmentTier.SPECULATIVE) {
@@ -173,21 +206,34 @@ public final class PlanApi extends ApiEndpoint {
 		if (tier == InvestmentTier.LOTTERY) {
 			warnings.add("彩券的期望報酬為負，請不要投入本金或借錢購買。");
 		}
+		//浮動投資只投入下限時風險升級或無法達成，要明確提醒
+		InvestmentPlan.Case low = plan.getLowCase();
+		if (low != null && plan.isFeasible()) {
+			String monthly = "每月浮動投資只投入下限（每月合計 $" + Numbers.group(low.getMonthly(), 0) + "）時";
+			if (low.getTier() == null) {
+				warnings.add(monthly + "沒有投入任何資金，無法達成目標。");
+			} else if (low.getTier().ordinal() > tier.ordinal()) {
+				warnings.add(monthly + "，需要的年化報酬率升為約 " + percent(low.getRate()) + "（" + low.getTier().getName() + "），請預留緩衝。");
+			}
+		}
 		return warnings;
 	}
 
 	private static List<String> suggestions(InvestmentPlan plan) {
 		List<String> suggestions = new ArrayList<>();
+		boolean hasMonthly = plan.getMonthly().signum() > 0;
 		if (plan.getExtendedRate() != null) {
-			suggestions.add("把期間延長到 " + plan.getTier().getMinYears() + " 年，需要的年化報酬率降為約 " + percent(plan.getExtendedRate())
-					+ "（" + plan.getExtendedTier().getName() + "）。");
+			suggestions.add("把期間延長到 " + plan.getTier().getMinYears() + " 年" + (hasMonthly ? "（每月照常投入）" : "") + "，需要的年化報酬率降為約 "
+					+ percent(plan.getExtendedRate()) + "（" + plan.getExtendedTier().getName() + "）。");
 		}
 		InvestmentTier benchmark = plan.getBenchmark();
 		if (benchmark != null) {
-			String basis = "以「" + benchmark.getName() + "」一般行情年報酬 " + percent(benchmark.getTypicalRate()) + " 估算";
-			suggestions.add("延長期間：" + basis + "，約需 " + term(plan.getBenchmarkMonths()) + "。");
-			suggestions.add("增加本金：維持 " + term(plan.getMonths()) + "、" + basis + "，本金需約 $" + Numbers.group(plan.getBenchmarkPrincipal(), 0) + "。");
-			suggestions.add("降低目標：維持本金與期間、" + basis + "，可期待獲利約 $" + Numbers.group(plan.getBenchmarkProfit(), 0) + "。");
+			String basis = "其他條件不變、以「" + benchmark.getName() + "」一般行情年報酬 " + percent(benchmark.getTypicalRate()) + " 估算";
+			suggestions.add("延長期間：" + basis + "，"
+					+ (plan.getBenchmarkMonths() < 0 ? "超過 1000 年也達不到。" : "約需 " + term(plan.getBenchmarkMonths()) + "。"));
+			suggestions.add("增加本金：" + basis + "，本金需約 $" + Numbers.group(plan.getBenchmarkPrincipal(), 0) + "。");
+			suggestions.add("增加每月投資：" + basis + "，每月需投入約 $" + Numbers.group(plan.getBenchmarkMonthly(), 0) + "。");
+			suggestions.add("降低目標：" + basis + "，可期待獲利約 $" + Numbers.group(plan.getBenchmarkProfit(), 0) + "。");
 		}
 		return suggestions;
 	}

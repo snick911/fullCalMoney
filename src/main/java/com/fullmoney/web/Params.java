@@ -66,6 +66,12 @@ public final class Params {
 		return toDecimal(first(name), name, label, new BigDecimal(min), new BigDecimal(max));
 	}
 
+	/** 選填的數字：沒有送出或空白時用 fallback，有輸入時照樣檢查格式與範圍 */
+	public BigDecimal optionalDecimal(String name, String label, String min, String max, BigDecimal fallback) {
+		String value = first(name);
+		return value == null || normalize(value).isEmpty() ? fallback : decimal(name, label, min, max);
+	}
+
 	public int integer(String name, String label, int min, int max) {
 		return toInteger(first(name), name, label, min, max);
 	}

@@ -342,6 +342,8 @@ select.input option { background: var(--surface); color: var(--fg); }
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
   align-items: start;
 }
+/* 只有一個區間時不撐滿整列 */
+.ranges--narrow { grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); }
 .range {
   min-width: 0; margin: 0; padding: .7rem .85rem .2rem;
   border: 1px solid var(--border); border-radius: 11px; background: var(--stripe);
@@ -502,6 +504,10 @@ select.input option { background: var(--surface); color: var(--fg); }
 .advice__list:empty { display: none; }
 .advice__list li + li { margin-top: .3rem; }
 .advice__list--warn { margin-top: .9rem; color: var(--warn); font-weight: 600; }
+
+/* 每月浮動投資的影響：上限、預期、下限三種情況 */
+.spread { margin-top: .5rem; border: 1px solid var(--border); border-radius: 9px; }
+.spread tbody tr.is-expected > * { font-weight: 700; }
 
 /* 可考慮的方案：每類標的一張卡片 */
 .options {
