@@ -24,7 +24,7 @@ import com.fullmoney.web.Params;
  * <p>參數：principal 投資本金（可為 0）、monthlyFixed 每月固定投資金額、floatMin / floatMax 每月浮動投資金額的區間（三者選填，預設 0）、
  * years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數</p>
  * <p>options 為可考慮的方案（由低風險到高風險），portfolios 為保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋），
- * 每型的 rows 為各資產的逐年金額與獲利，
+ * 每型的 weights 為定存／公債／公司債／股票比例、stockLevel 為股票等級、rows 為各資產的逐年金額與獲利，
  * floating 為浮動投資取上限 high／下限 low 時的情況（沒有浮動區間時為 null），
  * rows 每列為 [第幾個月底, 累積投入, 金額, 累積獲利, 累積報酬率]</p>
  */
@@ -142,9 +142,15 @@ public final class PlanApi extends ApiEndpoint {
 			out.put("code", profile.name());
 			out.put("name", profile.getName());
 			out.put("recommended", profile == plan.getRecommendedProfile());
-			out.put("deposit", portfolio.getDeposit());
-			out.put("bond", portfolio.getBond());
-			out.put("stock", portfolio.getStock());
+			List<Integer> weights = new ArrayList<>();
+			for (int weight : portfolio.getWeights()) {
+				weights.add(weight);
+			}
+			out.put("weights", weights);
+			InvestmentTier level = portfolio.getStockLevel();
+			out.put("stockLevel", level == null ? null : level.name());
+			out.put("stockLevelName", level == null ? null : level.getName());
+			out.put("stockInstruments", level == null ? null : level.getInstruments());
 			out.put("typicalRate", Values.ratio(portfolio.getTypicalRate()));
 			out.put("volatility", Values.ratio(portfolio.getVolatility()));
 			out.put("probability", Values.ratio(portfolio.getProbability()));
@@ -156,6 +162,7 @@ public final class PlanApi extends ApiEndpoint {
 			out.put("horizon", profile.getHorizon());
 			out.put("candidates", portfolio.getCandidates());
 			out.put("reachable", portfolio.getReachable());
+			out.put("simulated", portfolio.getSimulated());
 			out.put("rows", allocationRows(portfolio, whole));
 			list.add(out);
 		}
@@ -163,24 +170,25 @@ public final class PlanApi extends ApiEndpoint {
 	}
 
 	/**
-	 * 配置的逐年試算，每列為 [第幾個月底, 累積投入, 定存金額, 債券金額, 股票金額, 定存獲利, 債券獲利, 股票獲利, 總金額, 累積獲利]
+	 * 配置的逐年試算，每列為 [第幾個月底, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的獲利（4 欄）, 總金額, 累積獲利]
 	 */
 	private static List<Object[]> allocationRows(InvestmentPlan.Portfolio portfolio, boolean whole) {
 		List<Object[]> rows = new ArrayList<>();
 		for (InvestmentPlan.AllocationRow row : portfolio.getRows()) {
-			Object[] out = new Object[10];
+			int assets = row.getValues().length;
+			Object[] out = new Object[4 + assets * 2];
 			BigDecimal invested = BigDecimal.ZERO;
 			BigDecimal total = BigDecimal.ZERO;
 			out[0] = row.getMonths();
-			for (int i = 0; i < 3; i++) {
+			for (int i = 0; i < assets; i++) {
 				invested = invested.add(row.getInvested()[i]);
 				total = total.add(row.getValues()[i]);
 				out[2 + i] = Values.money(row.getValues()[i], whole);
-				out[5 + i] = Values.money(row.getValues()[i].subtract(row.getInvested()[i]), whole);
+				out[2 + assets + i] = Values.money(row.getValues()[i].subtract(row.getInvested()[i]), whole);
 			}
 			out[1] = Values.money(invested, whole);
-			out[8] = Values.money(total, whole);
-			out[9] = Values.money(total.subtract(invested), whole);
+			out[2 + assets * 2] = Values.money(total, whole);
+			out[3 + assets * 2] = Values.money(total.subtract(invested), whole);
 			rows.add(out);
 		}
 		return rows;
@@ -201,16 +209,19 @@ public final class PlanApi extends ApiEndpoint {
 	private static String portfolioSummary(InvestmentPlan plan) {
 		int total = 0;
 		int reachable = 0;
+		int simulated = 0;
 		InvestmentPlan.Portfolio recommended = null;
 		for (InvestmentPlan.Portfolio portfolio : plan.getPortfolios()) {
 			total += portfolio.getCandidates();
 			reachable += portfolio.getReachable();
+			simulated += portfolio.getSimulated();
 			if (portfolio.getProfile() == plan.getRecommendedProfile()) {
 				recommended = portfolio;
 			}
 		}
-		StringBuilder text = new StringBuilder("以每 5% 一級試算 ").append(total).append(" 種定存／債券／股票配置，每種模擬 ")
-				.append(MarketSimulator.PATHS).append(" 種市場走勢，其中 ").append(reachable).append(" 種達成機率超過 50%。");
+		StringBuilder text = new StringBuilder("以每 5% 一級試算 ").append(Numbers.group(BigDecimal.valueOf(total), 0))
+				.append(" 種定存／公債／公司債／股票配置（股票再分 5 個等級），估計約 ").append(Numbers.group(BigDecimal.valueOf(reachable), 0))
+				.append(" 種達成機率超過 50%；再把較好的 ").append(simulated).append(" 種各模擬 ").append(MarketSimulator.PATHS).append(" 種市場走勢。");
 		if (recommended == null) {
 			return text.append("所有配置的達成機率都是 0，需要延長期間、增加投入或調整目標。").toString();
 		}
@@ -224,7 +235,9 @@ public final class PlanApi extends ApiEndpoint {
 	}
 
 	private static String mix(InvestmentPlan.Portfolio portfolio) {
-		return "定存 " + portfolio.getDeposit() + "%、債券 " + portfolio.getBond() + "%、股票 " + portfolio.getStock() + "%";
+		int[] weights = portfolio.getWeights();
+		String stock = "股票 " + weights[3] + "%" + (portfolio.getStockLevel() == null ? "" : "（" + portfolio.getStockLevel().getName() + "）");
+		return "定存 " + weights[0] + "%、公債 " + weights[1] + "%、公司債 " + weights[2] + "%、" + stock;
 	}
 
 	/** ex. 0.6234 → 62% */

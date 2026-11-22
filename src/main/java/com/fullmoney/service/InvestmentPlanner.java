@@ -20,11 +20,12 @@ import com.fullmoney.bean.InvestmentTier;
  * <p>判斷規則：</p>
  * <ol>
  * <li>從風險最低的類別往上找，報酬率上限（行情好）達得到的類別都是可考慮的方案。</li>
- * <li>列到第一個「一般行情就能達成、且投資期間足夠」的類別，再多列一類較高報酬的選擇，最多 3 個方案。</li>
- * <li>資產配置：定存／債券／股票以每 5% 一級列出所有組合，依股票比例分成保守型、穩健型、積極型（定存比例有上限，見 AllocationProfile）。
- * 每種組合以 {@link MarketSimulator} 模擬 500 種市場走勢，每型在達成機率與最高者相差不到 2 個百分點的配置中取波動最低者
- * （機率都是 0 時取報酬最高者）。
- * 報酬率依比例加權；預估波動假設定存 0%、債券 5%、股票 18%，股債相關係數 0.2。
+ * <li>列到第一個「一般行情就能達成、且投資期間足夠」的類別，再多列一類較高報酬的選擇，最多 4 個方案。</li>
+ * <li>資產配置：定存／公債／公司債／股票以每 5% 一級列出所有組合，股票部位再從該類型可用的股票等級中選一種，
+ * 依股票比例分成保守型、穩健型、積極型（定存、公司債有上限，見 AllocationProfile）。
+ * 先以近似公式（對數常態）估計每種組合的達成機率篩選，再把每型較好的組合以 {@link MarketSimulator} 模擬 500 種市場走勢，
+ * 在達成機率與最高者相差不到 2 個百分點的配置中取波動最低者（機率都是 0 時取報酬最高者）。
+ * 報酬率依比例加權；預估波動見 InvestmentTier，相關係數：公債與公司債 0.5、公債與股票 0.1、公司債與股票 0.5。
  * 三型中依序建議：期間足夠且機率 75% 以上、期間足夠且機率 50% 以上（以上兩級取最保守的一型）、期間足夠中機率最高、不看期間機率最高。</li>
  * <li>連積極成長的上限都達不到時為高風險投機；年化與總報酬都超過 100% 時只能靠運氣（彩券）。</li>
  * <li>每月浮動投資以區間中間值為預期情況，另外計算只投入下限、投入上限時需要的報酬率。</li>
@@ -35,26 +36,40 @@ public class InvestmentPlanner {
 	private static final int MONTHS_PER_YEAR = 12;
 
 	/** 最多列出幾個方案 */
-	private static final int MAX_OPTIONS = 3;
+	private static final int MAX_OPTIONS = 4;
 
 	/** 需要的年化報酬率與總報酬率都超過 100% 時（ex. 1 年內要翻倍以上），只能靠運氣 */
 	private static final double LOTTERY_RATE = 1.0;
 
 	/** 計畫不可行時，以股票／基金的一般行情報酬率估算延長期間、增加本金或每月投資、降低目標的替代方案 */
-	private static final InvestmentTier BENCHMARK = InvestmentTier.STOCK;
+	private static final InvestmentTier BENCHMARK = InvestmentTier.STOCK_CORE;
 
 	/** 估算延長期間時最多找到 1000 年 */
 	private static final int MAX_SEARCH_MONTHS = 12_000;
 
-	/** 資產配置的三種資產，依序為定存、債券、股票 */
-	private static final InvestmentTier[] ASSETS = { InvestmentTier.DEPOSIT, InvestmentTier.BOND, InvestmentTier.STOCK };
+	/** 資產配置的資產數：定存、公債、公司債、股票（股票再選等級） */
+	private static final int ASSET_COUNT = 4;
+	private static final int DEPOSIT = 0;
+	private static final int GOV_BOND = 1;
+	private static final int CORPORATE_BOND = 2;
+	private static final int STOCK = 3;
 
 	/** 資產配置比例的間隔（%） */
 	private static final int ALLOCATION_STEP = 5;
 
-	/** 預估年波動的股債相關係數；各資產的波動見 InvestmentTier（定存 0、債券 5%、股票 18%） */
-	private static final double STOCK_BOND_CORRELATION = 0.2;
+	/** 相關係數：公債與公司債、公債與股票、公司債與股票；定存視為沒有波動 */
+	private static final double GOV_CORPORATE_CORRELATION = 0.5;
+	private static final double GOV_STOCK_CORRELATION = 0.1;
+	private static final double CORPORATE_STOCK_CORRELATION = 0.5;
 	private static final int VOLATILITY_SCALE = 4;
+
+	/** 近似公式篩選後，每型最多送幾種配置做蒙地卡羅模擬：機率最高的 15 種，加上機率與最高者相差 6 個百分點內波動最低的 20 種 */
+	private static final int SHORTLIST_TOP = 15;
+	private static final int SHORTLIST_CALM = 20;
+	private static final double SHORTLIST_MARGIN = 0.06;
+
+	/** 近似機率都低於此值時視為達不到，改挑一般行情報酬最高的配置模擬 */
+	private static final double UNREACHABLE = 1e-4;
 
 	/** 建議資產配置時「把握高」與「有機會」的達成機率門檻 */
 	private static final double CONFIDENT = 0.75;
@@ -227,7 +242,9 @@ public class InvestmentPlanner {
 		}
 		boolean settled = false;
 		for (InvestmentTier tier : InvestmentTier.values()) {
-			if (tier.ordinal() < lowest.ordinal() || tier.getMaxRate() == null || options.size() == MAX_OPTIONS) {
+			//風險較高的類別報酬率不一定較高（ex. 定存型股票低於公司債），行情好也達不到的略過
+			if (tier.ordinal() < lowest.ordinal() || tier.getMaxRate() == null || options.size() == MAX_OPTIONS
+					|| rate > tier.getMaxRate().doubleValue() + EPSILON) {
 				continue;
 			}
 			double max = tier.getMaxRate().doubleValue();
@@ -253,82 +270,164 @@ public class InvestmentPlanner {
 	}
 
 	/**
-	 * 從此類型每 5% 一級的所有配置中挑最佳：達成機率與最高者相差不到 2 個百分點的配置中，取波動最低者（同波動取報酬高）；
-	 * 500 次模擬的誤差約 ±2 個百分點，不值得為了更小的差距多承擔風險。機率都是 0 時取一般行情報酬最高、最接近目標者
+	 * 從此類型每 5% 一級的所有配置（股票部位再選 5 個等級之一）中挑最佳：
+	 * <ol>
+	 * <li>以近似公式估計每種配置的達成機率（{@link #approximateProbability}）。</li>
+	 * <li>機率最高的 15 種，加上與最高者相差 6 個百分點內波動最低的 20 種，以蒙地卡羅模擬 500 種走勢。</li>
+	 * <li>模擬機率與最高者相差不到 2 個百分點的配置中取波動最低者（同波動取報酬高）；500 次模擬的誤差約 ±2 個百分點，
+	 * 不值得為了更小的差距多承擔風險。機率都是 0 時取一般行情報酬最高、最接近目標者。</li>
+	 * </ol>
 	 */
 	private static InvestmentPlan.Portfolio bestPortfolio(AllocationProfile profile, double principal, double monthly, int months, double target,
 			MarketSimulator simulator) {
-		List<int[]> weightsList = new ArrayList<>();
-		List<double[]> finalsList = new ArrayList<>();
-		List<InvestmentPlan.Candidate> evaluated = new ArrayList<>();
-		double topProbability = 0;
+		List<InvestmentPlan.Candidate> all = new ArrayList<>();
 		int reachable = 0;
 		for (int stock = 0; stock <= 100; stock += ALLOCATION_STEP) {
 			if (AllocationProfile.classify(stock) != profile) {
 				continue;
 			}
-			for (int bond = 0; bond <= 100 - stock; bond += ALLOCATION_STEP) {
-				int[] weights = { 100 - stock - bond, bond, stock };
-				if (weights[0] > profile.getMaxDeposit()) {
-					continue;
-				}
-				double typical = weighted(weights).doubleValue();
-				double volatility = volatility(bond, stock);
-				double[] finals = simulator.simulate(principal, monthly, typical, volatility);
-				double probability = MarketSimulator.probability(finals, target);
-				weightsList.add(weights);
-				finalsList.add(finals);
-				evaluated.add(new InvestmentPlan.Candidate(profile, weights, typical, volatility, probability, MarketSimulator.percentile(finals, 0.5)));
-				topProbability = Math.max(topProbability, probability);
-				if (probability >= LIKELY) {
-					reachable++;
+			int maxCorporate = Math.min(profile.getMaxCorporate(), 100 - stock);
+			for (int corporate = 0; corporate <= maxCorporate; corporate += ALLOCATION_STEP) {
+				int maxDeposit = Math.min(profile.getMaxDeposit(), 100 - stock - corporate);
+				for (int deposit = 0; deposit <= maxDeposit; deposit += ALLOCATION_STEP) {
+					int[] weights = { deposit, 100 - stock - corporate - deposit, corporate, stock };
+					//沒有股票時不必區分股票等級
+					InvestmentTier[] levels = stock == 0 ? new InvestmentTier[] { null } : profile.getStockLevels();
+					for (InvestmentTier level : levels) {
+						double typical = weighted(weights, level).doubleValue();
+						double volatility = volatility(weights, level);
+						double probability = approximateProbability(principal, monthly, months, typical, volatility, target);
+						all.add(new InvestmentPlan.Candidate(profile, weights, level, typical, volatility, probability));
+						if (probability >= LIKELY) {
+							reachable++;
+						}
+					}
 				}
 			}
 		}
-		int chosen = -1;
-		for (int i = 0; i < evaluated.size(); i++) {
-			InvestmentPlan.Candidate candidate = evaluated.get(i);
-			if (topProbability > 0 && candidate.getProbability() < topProbability - PROBABILITY_TOLERANCE - EPSILON) {
+
+		List<InvestmentPlan.Candidate> shortlist = shortlist(all);
+		double top = 0;
+		for (InvestmentPlan.Candidate candidate : shortlist) {
+			candidate.setProbability(MarketSimulator.probability(simulator.simulate(principal, monthly, candidate.getTypicalRate(), candidate.getVolatility()),
+					target));
+			top = Math.max(top, candidate.getProbability());
+		}
+		//機率很低時容許的差距也縮小（最多為最高機率的 1/4），避免把機率 0 的配置當成差不多
+		double tolerance = Math.min(PROBABILITY_TOLERANCE, top / 4);
+		InvestmentPlan.Candidate best = null;
+		for (InvestmentPlan.Candidate candidate : shortlist) {
+			if (top > 0 && candidate.getProbability() < top - tolerance - EPSILON) {
 				continue;
 			}
-			if (chosen < 0 || better(candidate, evaluated.get(chosen), topProbability > 0)) {
-				chosen = i;
+			if (best == null || better(candidate, best, top > 0)) {
+				best = candidate;
 			}
 		}
-		InvestmentPlan.Candidate best = evaluated.get(chosen);
-		double[] finals = finalsList.get(chosen);
+
+		double[] finals = simulator.simulate(principal, monthly, best.getTypicalRate(), best.getVolatility());
 		BigDecimal[] outcomes = new BigDecimal[OUTCOME_PERCENTILES.length];
 		for (int i = 0; i < outcomes.length; i++) {
 			outcomes[i] = decimal(MarketSimulator.percentile(finals, OUTCOME_PERCENTILES[i]));
 		}
 		boolean horizonOk = months >= profile.getMinYears() * MONTHS_PER_YEAR;
-		int[] weights = weightsList.get(chosen);
-		return new InvestmentPlan.Portfolio(profile, weights, weighted(weights), decimal(best.getVolatility()).setScale(VOLATILITY_SCALE, RoundingMode.HALF_UP),
-				probability(best.getProbability()), outcomes, horizonOk, evaluated.size(), reachable, allocationRows(weights, principal, monthly, months));
+		return new InvestmentPlan.Portfolio(best, weighted(best.getWeights(), best.getStockLevel()),
+				decimal(best.getVolatility()).setScale(VOLATILITY_SCALE, RoundingMode.HALF_UP), outcomes, horizonOk, all.size(), reachable, shortlist.size(),
+				allocationRows(best, principal, monthly, months));
+	}
+
+	/** 近似機率最高的幾種，加上機率接近最高者中波動最低的幾種；都幾乎不可能時取一般行情報酬最高的幾種 */
+	private static List<InvestmentPlan.Candidate> shortlist(List<InvestmentPlan.Candidate> all) {
+		List<InvestmentPlan.Candidate> sorted = new ArrayList<>(all);
+		sorted.sort((a, b) -> a.getProbability() != b.getProbability() ? Double.compare(b.getProbability(), a.getProbability())
+				: Double.compare(a.getVolatility(), b.getVolatility()));
+		double top = sorted.get(0).getProbability();
+		List<InvestmentPlan.Candidate> list = new ArrayList<>();
+		if (top < UNREACHABLE) {
+			sorted.sort((a, b) -> a.getTypicalRate() != b.getTypicalRate() ? Double.compare(b.getTypicalRate(), a.getTypicalRate())
+					: Double.compare(a.getVolatility(), b.getVolatility()));
+			list.addAll(sorted.subList(0, Math.min(SHORTLIST_TOP, sorted.size())));
+			return list;
+		}
+		list.addAll(sorted.subList(0, Math.min(SHORTLIST_TOP, sorted.size())));
+		List<InvestmentPlan.Candidate> calm = new ArrayList<>();
+		for (InvestmentPlan.Candidate candidate : sorted) {
+			if (candidate.getProbability() >= top - SHORTLIST_MARGIN) {
+				calm.add(candidate);
+			}
+		}
+		calm.sort((a, b) -> a.getVolatility() != b.getVolatility() ? Double.compare(a.getVolatility(), b.getVolatility())
+				: Double.compare(b.getTypicalRate(), a.getTypicalRate()));
+		for (int i = 0; i < Math.min(SHORTLIST_CALM, calm.size()); i++) {
+			if (!list.contains(calm.get(i))) {
+				list.add(calm.get(i));
+			}
+		}
+		return list;
 	}
 
 	/**
-	 * 逐年試算：本金與每月投資依配置比例分到定存、債券、股票，之後各自以一般行情報酬率逐月複利（不做再平衡）；
+	 * 近似達成機率：把期滿金額視為對數常態分布，中位數為一般行情的逐月複利金額，
+	 * 變異以「各筆投入依期滿價值加權的平均剩餘年數」計算；沒有每月投資時與模擬的模型完全相同
+	 */
+	static double approximateProbability(double principal, double monthly, int months, double rate, double volatility, double target) {
+		double median = futureValue(principal, monthly, rate, months);
+		if (volatility < EPSILON) {
+			return median >= target * (1 - EPSILON) ? 1 : 0;
+		}
+		double z = Math.log(median / target) / (volatility * Math.sqrt(effectiveYears(principal, monthly, rate, months)));
+		return normalCdf(z);
+	}
+
+	/** 各筆投入（本金與每月投資）依期滿價值加權的平均剩餘年數 */
+	private static double effectiveYears(double principal, double monthly, double rate, int months) {
+		if (monthly == 0) {
+			return months / (double) MONTHS_PER_YEAR;
+		}
+		double monthGrowth = Math.pow(1 + rate, 1.0 / MONTHS_PER_YEAR);
+		double growth = 1;
+		double weightSum = 0;
+		double weightedYears = 0;
+		for (int k = months - 1; k >= 0; k--) {
+			growth *= monthGrowth;
+			double amount = monthly + (k == 0 ? principal : 0);
+			weightSum += amount * growth;
+			weightedYears += amount * growth * (months - k) / MONTHS_PER_YEAR;
+		}
+		return weightedYears / weightSum;
+	}
+
+	/** 標準常態分布的累積機率（Abramowitz & Stegun 26.2.17，誤差小於 7.5e-8） */
+	static double normalCdf(double z) {
+		double t = 1 / (1 + 0.2316419 * Math.abs(z));
+		double density = 0.3989422804014327 * Math.exp(-z * z / 2);
+		double tail = density * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+		return z >= 0 ? 1 - tail : tail;
+	}
+
+	/**
+	 * 逐年試算：本金與每月投資依配置比例分到定存、公債、公司債、股票，之後各自以一般行情報酬率逐月複利（不做再平衡）；
 	 * 每滿一年一列，最後不足一年的月份另列
 	 */
-	private static List<InvestmentPlan.AllocationRow> allocationRows(int[] weights, double principal, double monthly, int months) {
+	private static List<InvestmentPlan.AllocationRow> allocationRows(InvestmentPlan.Candidate best, double principal, double monthly, int months) {
+		double[] rates = rates(best.getStockLevel());
 		List<InvestmentPlan.AllocationRow> rows = new ArrayList<>();
 		for (int m = MONTHS_PER_YEAR; m <= months; m += MONTHS_PER_YEAR) {
-			rows.add(allocationRow(weights, principal, monthly, m));
+			rows.add(allocationRow(best.getWeights(), rates, principal, monthly, m));
 		}
 		if (months % MONTHS_PER_YEAR != 0) {
-			rows.add(allocationRow(weights, principal, monthly, months));
+			rows.add(allocationRow(best.getWeights(), rates, principal, monthly, months));
 		}
 		return rows;
 	}
 
-	private static InvestmentPlan.AllocationRow allocationRow(int[] weights, double principal, double monthly, int months) {
-		BigDecimal[] invested = new BigDecimal[ASSETS.length];
-		BigDecimal[] values = new BigDecimal[ASSETS.length];
-		for (int i = 0; i < ASSETS.length; i++) {
+	private static InvestmentPlan.AllocationRow allocationRow(int[] weights, double[] rates, double principal, double monthly, int months) {
+		BigDecimal[] invested = new BigDecimal[ASSET_COUNT];
+		BigDecimal[] values = new BigDecimal[ASSET_COUNT];
+		for (int i = 0; i < ASSET_COUNT; i++) {
 			double share = weights[i] / 100.0;
 			invested[i] = decimal((principal + monthly * months) * share);
-			values[i] = decimal(futureValue(principal * share, monthly * share, ASSETS[i].getTypicalRate().doubleValue(), months));
+			values[i] = decimal(futureValue(principal * share, monthly * share, rates[i], months));
 		}
 		return new InvestmentPlan.AllocationRow(months, invested, values);
 	}
@@ -344,20 +443,30 @@ public class InvestmentPlanner {
 		return candidate.getVolatility() < current.getVolatility() - EPSILON;
 	}
 
+	/** 四種資產的一般行情報酬率：定存、公債、公司債、股票（依等級，沒有股票時為 0） */
+	private static double[] rates(InvestmentTier stockLevel) {
+		return new double[] { InvestmentTier.DEPOSIT.getTypicalRate().doubleValue(), InvestmentTier.GOV_BOND.getTypicalRate().doubleValue(),
+				InvestmentTier.CORPORATE_BOND.getTypicalRate().doubleValue(), stockLevel == null ? 0 : stockLevel.getTypicalRate().doubleValue() };
+	}
+
 	/** 依比例加權的一般行情年報酬率 */
-	private static BigDecimal weighted(int[] weights) {
-		BigDecimal total = BigDecimal.ZERO;
-		for (int i = 0; i < ASSETS.length; i++) {
-			total = total.add(ASSETS[i].getTypicalRate().multiply(BigDecimal.valueOf(weights[i])));
+	private static BigDecimal weighted(int[] weights, InvestmentTier stockLevel) {
+		BigDecimal total = InvestmentTier.DEPOSIT.getTypicalRate().multiply(BigDecimal.valueOf(weights[DEPOSIT]))
+				.add(InvestmentTier.GOV_BOND.getTypicalRate().multiply(BigDecimal.valueOf(weights[GOV_BOND])))
+				.add(InvestmentTier.CORPORATE_BOND.getTypicalRate().multiply(BigDecimal.valueOf(weights[CORPORATE_BOND])));
+		if (stockLevel != null) {
+			total = total.add(stockLevel.getTypicalRate().multiply(BigDecimal.valueOf(weights[STOCK])));
 		}
 		return total.movePointLeft(2);
 	}
 
-	/** 預估年波動 = √((債券比例 × 債券波動)² + (股票比例 × 股票波動)² + 2 × 相關係數 × 兩者的乘積)，定存視為沒有波動 */
-	private static double volatility(int bondPercent, int stockPercent) {
-		double bond = bondPercent / 100.0 * InvestmentTier.BOND.getVolatility().doubleValue();
-		double stock = stockPercent / 100.0 * InvestmentTier.STOCK.getVolatility().doubleValue();
-		return Math.sqrt(bond * bond + stock * stock + 2 * STOCK_BOND_CORRELATION * bond * stock);
+	/** 預估年波動 = √(Σ 比例ᵢ × 比例ⱼ × 波動ᵢ × 波動ⱼ × 相關係數ᵢⱼ)，定存視為沒有波動 */
+	private static double volatility(int[] weights, InvestmentTier stockLevel) {
+		double gov = weights[GOV_BOND] / 100.0 * InvestmentTier.GOV_BOND.getVolatility().doubleValue();
+		double corporate = weights[CORPORATE_BOND] / 100.0 * InvestmentTier.CORPORATE_BOND.getVolatility().doubleValue();
+		double stock = stockLevel == null ? 0 : weights[STOCK] / 100.0 * stockLevel.getVolatility().doubleValue();
+		return Math.sqrt(gov * gov + corporate * corporate + stock * stock + 2 * GOV_CORPORATE_CORRELATION * gov * corporate
+				+ 2 * GOV_STOCK_CORRELATION * gov * stock + 2 * CORPORATE_STOCK_CORRELATION * corporate * stock);
 	}
 
 	/**

@@ -435,8 +435,10 @@
 
     //資產配置：保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋、蒙地卡羅模擬）
     setOut(scope, 'portfolioSummary', d.portfolioSummary);
-    const mix = (deposit, bond, stock) => `<span class="mix"><span class="mix__bar" aria-hidden="true" data-mix="${deposit},${bond},${stock}">`
-      + `<i></i><i></i><i></i></span>${deposit}／${bond}／${stock}</span>`;
+    //比例條：定存／公債／公司債／股票，由淺到深
+    const mix = (p) => `<span class="mix"><span class="mix__bar" aria-hidden="true" data-mix="${p.weights.join(',')}">`
+      + `<i></i><i></i><i></i><i></i></span>${p.weights.join('／')}</span>`
+      + (p.stockLevelName ? `<span class="portfolio__count">股票：${escapeHtml(p.stockLevelName)}</span>` : '');
     const body = $('tbody[data-portfolio-rows]', scope);
     body.innerHTML = d.portfolios.map((p) => {
       const [chanceText, chanceClass] = CHANCES[p.chance];
@@ -444,8 +446,8 @@
       const tags = `<span class="option__tag${chanceClass}">${chanceText}</span>`
         + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">期間短於 ${escapeHtml(p.horizon)}</span>`);
       return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${escapeHtml(p.name)}${badge}`
-        + `<span class="portfolio__count">${p.candidates} 種中 ${p.reachable} 種機率過半</span></th>`
-        + `<td>${mix(p.deposit, p.bond, p.stock)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
+        + `<span class="portfolio__count">${p.candidates.toLocaleString('zh-TW')} 種中約 ${p.reachable.toLocaleString('zh-TW')} 種機率過半</span></th>`
+        + `<td>${mix(p)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
         + `<td><span class="portfolio__chance">${chancePercent(p.probability)}</span><span class="portfolio__tags">${tags}</span></td>`
         + `<td>${twd(p.median)}<span class="portfolio__count">${twd(p.pessimistic)}～${twd(p.optimistic)}</span></td></tr>`;
     }).join('');
@@ -463,24 +465,32 @@
     $('[data-allocation-years]', scope).innerHTML = d.portfolios.map((p) => allocationYears(p, d.rows, twd)).join('');
   }
 
-  /** 一種配置的逐年試算表；p.rows 每列為 [月, 累積投入, 定存, 債券, 股票, 定存獲利, 債券獲利, 股票獲利, 總金額, 累積獲利] */
+  const ASSET_NAMES = ['定存', '公債', '公司債', '股票'];
+
+  /**
+   * 一種配置的逐年試算表；p.rows 每列為 [月, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的獲利（4 欄）, 總金額, 累積獲利]
+   */
   function allocationYears(p, targetRows, twd) {
-    const weights = [p.deposit, p.bond, p.stock];
-    const asset = (r, i) => (weights[i] === 0 ? `<td class="is-muted">${NO_VALUE}</td>`
-      : `<td>${twd(r[2 + i])}<span class="asset-gain">獲利 ${twd(r[5 + i])}</span></td>`);
+    const count = ASSET_NAMES.length;
+    const asset = (r, i) => (p.weights[i] === 0 ? `<td class="is-muted">${NO_VALUE}</td>`
+      : `<td>${twd(r[2 + i])}<span class="asset-gain">獲利 ${twd(r[2 + count + i])}</span></td>`);
     const body = p.rows.map((r, i) => {
+      const total = r[2 + count * 2];
       const target = targetRows[i] ? targetRows[i][2] : null;
-      const ahead = target == null || r[8] >= target;
-      return `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td>${asset(r, 0)}${asset(r, 1)}${asset(r, 2)}`
-        + `<td class="${ahead ? 'is-accent' : 'is-down'}">${twd(r[8])}</td><td>${twd(r[9])}</td><td>${target == null ? NO_VALUE : twd(target)}</td></tr>`;
+      const ahead = target == null || total >= target;
+      return `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td>${ASSET_NAMES.map((name, j) => asset(r, j)).join('')}`
+        + `<td class="${ahead ? 'is-accent' : 'is-down'}">${twd(total)}</td><td>${twd(r[3 + count * 2])}</td>`
+        + `<td>${target == null ? NO_VALUE : twd(target)}</td></tr>`;
     }).join('');
     const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
+    const weights = ASSET_NAMES.map((name, i) => `${name} ${p.weights[i]}%`).join('・');
+    const stockHead = p.stockLevelName ? `股票<span class="asset-gain">${escapeHtml(p.stockLevelName)}</span>` : '股票';
     return '<div class="card card--flush">'
       + `<div class="card__head"><h2>${escapeHtml(p.name)} 逐年試算${badge}</h2>`
-      + `<span class="card__meta">定存 ${p.deposit}%・債券 ${p.bond}%・股票 ${p.stock}%｜達成機率 ${chancePercent(p.probability)}</span></div>`
+      + `<span class="card__meta">${weights}｜達成機率 ${chancePercent(p.probability)}</span></div>`
       + `<div class="table-wrap" tabindex="0" aria-label="${escapeHtml(p.name)}逐年試算，可捲動"><table class="data-table">`
-      + '<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th><th scope="col">定存</th><th scope="col">債券</th><th scope="col">股票</th>'
-      + '<th scope="col">總金額</th><th scope="col">累積獲利</th><th scope="col">目標進度</th></tr></thead>'
+      + '<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th><th scope="col">定存</th><th scope="col">公債</th><th scope="col">公司債</th>'
+      + `<th scope="col">${stockHead}</th><th scope="col">總金額</th><th scope="col">累積獲利</th><th scope="col">目標進度</th></tr></thead>`
       + `<tbody>${body}</tbody></table></div></div>`;
   }
 

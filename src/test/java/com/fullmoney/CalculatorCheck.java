@@ -222,9 +222,9 @@ public final class CalculatorCheck {
 				.contains("\"field\":\"rateMax\""));
 
 		//投資計畫：依需要的年化報酬率套用建議規則
-		check("plan 5% is bond", true, plan("years=5&months=0&profit=276281.5625").contains("\"tier\":\"BOND\""));
-		check("plan 5.01% is balanced", true, plan("years=5&months=0&profit=277600").contains("\"tier\":\"BALANCED\""));
-		check("plan long 150% is stock", true, plan("years=10&months=0&profit=1500000").contains("\"tier\":\"STOCK\""));
+		check("plan 5% is gov bond", true, plan("years=5&months=0&profit=276281.5625").contains("\"tier\":\"GOV_BOND\""));
+		check("plan 5.02% is corporate bond", true, plan("years=5&months=0&profit=277600").contains("\"tier\":\"CORPORATE_BOND\""));
+		check("plan long 150% is core stock", true, plan("years=10&months=0&profit=1500000").contains("\"tier\":\"STOCK_CORE\""));
 		String doubled = plan("years=2&months=0&profit=1000000");
 		check("plan 2y double speculative", true, doubled.contains("\"tier\":\"SPECULATIVE\"") && doubled.contains("\"feasible\":false")
 				&& doubled.contains("延長期間"));
@@ -232,33 +232,33 @@ public final class CalculatorCheck {
 		check("plan short month not lottery", true, plan("years=0&months=1&profit=100000").contains("\"tier\":\"SPECULATIVE\""));
 		check("plan zero profit deposit", true, plan("years=3&months=6&profit=0").contains("\"tier\":\"DEPOSIT\""));
 		String shortStock = plan("years=3&months=0&profit=400000");
-		check("plan short horizon warns", true, shortStock.contains("\"tier\":\"STOCK\"") && shortStock.contains("\"feasible\":true")
+		check("plan short horizon warns", true, shortStock.contains("\"tier\":\"STOCK_CORE\"") && shortStock.contains("\"feasible\":true")
 				&& shortStock.contains("短於"));
 		check("plan last row is target", true, plan("years=2&months=6&profit=250000").contains("[30,1000000.00,1250000.00,250000.00,"));
 		check("plan needs period", true, plan("years=0&months=0&profit=1").contains("\"field\":\"years\""));
-		check("plan tier boundaries", "DEPOSIT BOND SPECULATIVE LOTTERY", InvestmentPlanner.tierOf(0.02, 0.1) + " " + InvestmentPlanner.tierOf(0.020001, 0.1)
+		check("plan tier boundaries", "DEPOSIT GOV_BOND SPECULATIVE LOTTERY", InvestmentPlanner.tierOf(0.03, 0.1) + " " + InvestmentPlanner.tierOf(0.030001, 0.1)
 				+ " " + InvestmentPlanner.tierOf(1.5, 0.5) + " " + InvestmentPlanner.tierOf(1.5, 1.5));
 
 		//可達成的方案：從風險最低的往上列到第一個一般行情可達成的，再多列一類，最多 3 個
 		String bondOrStock = plan("years=5&months=0&profit=250000");
-		check("plan options bond or stock", "BOND BALANCED STOCK", optionCodes(bondOrStock));
-		//資產配置：每 5% 一級搜尋、每種配置模擬 500 種走勢，每型取機率與最高者相差 2 個百分點內波動最低的配置
-		check("plan portfolio conservative best", true, bondOrStock.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":false,"
-				+ "\"deposit\":0,\"bond\":75,\"stock\":25,\"typicalRate\":0.0437500000,\"volatility\":0.0641000000,\"probability\":0.4800000000,\"chance\":\"STRETCH\""));
-		check("plan portfolio balanced best", true, bondOrStock.contains("\"code\":\"BALANCED\",\"name\":\"穩健型\",\"recommended\":true,"
-				+ "\"deposit\":0,\"bond\":60,\"stock\":40,\"typicalRate\":0.0490000000,\"volatility\":0.0834000000,\"probability\":0.5420000000,\"chance\":\"LIKELY\""));
-		check("plan portfolio aggressive not all stock", true, bondOrStock.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"recommended\":false,"
-				+ "\"deposit\":0,\"bond\":20,\"stock\":80,"));
-		check("plan portfolio search size", true, bondOrStock.contains("\"candidates\":66,\"reachable\":0") && bondOrStock.contains("\"candidates\":28,\"reachable\":14")
-				&& bondOrStock.contains("試算 139 種") && bondOrStock.contains("模擬 500 種市場走勢"));
-		//三種配置都有逐年試算；穩健型 0/60/40、100 萬、5 年：債券 60 萬 × 1.035^5、股票 40 萬 × 1.07^5，定存 0
+		check("plan options bond or stock", "GOV_BOND CORPORATE_BOND STOCK_INCOME", optionCodes(bondOrStock));
+		//資產配置：定存／公債／公司債／股票每 5% 一級（股票再選等級），近似篩選後模擬，每型取機率最高（2 個百分點內取波動低）
+		check("plan portfolio conservative best", true, bondOrStock.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":true,"
+				+ "\"weights\":[0,60,20,20],\"stockLevel\":\"STOCK_CORE\"") && bondOrStock.contains("\"probability\":0.6120000000,\"chance\":\"LIKELY\""));
+		check("plan portfolio balanced best", true, bondOrStock.contains("\"code\":\"BALANCED\",\"name\":\"穩健型\",\"recommended\":false,"
+				+ "\"weights\":[0,45,25,30],\"stockLevel\":\"STOCK_CORE\""));
+		check("plan portfolio aggressive best", true, bondOrStock.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"recommended\":false,"
+				+ "\"weights\":[0,25,25,50],\"stockLevel\":\"STOCK_AGGRESSIVE\""));
+		check("plan portfolio search size", true, bondOrStock.contains("\"candidates\":605,") && bondOrStock.contains("\"candidates\":585,")
+				&& bondOrStock.contains("\"candidates\":840,") && bondOrStock.contains("試算 2,030 種") && bondOrStock.contains("模擬 500 種市場走勢"));
+		//三種配置都有逐年試算；保守型 0/60/20/20、100 萬、5 年：公債 60 萬 × 1.04^5、公司債與穩健型股票各 20 萬 × 1.07^5
 		check("plan allocation rows for each profile", 4, bondOrStock.split("\"rows\":\\[").length - 1);
 		check("plan no candidate list", false, bondOrStock.contains("\"candidates\":["));
-		String bondValue = money(600000 * Math.pow(1.035, 5));
-		String stockValue = money(400000 * Math.pow(1.07, 5));
-		check("plan allocation year 5 amounts", true, bondOrStock.contains("[60,1000000.00,0.00," + bondValue + "," + stockValue + ",0.00,"
-				+ money(600000 * Math.pow(1.035, 5) - 600000) + "," + money(400000 * Math.pow(1.07, 5) - 400000) + ","));
-		check("plan option probability", true, bondOrStock.contains("\"code\":\"BOND\"") && bondOrStock.contains("\"probability\":0.3180000000"));
+		String govValue = money(600000 * Math.pow(1.04, 5));
+		String sevenValue = money(200000 * Math.pow(1.07, 5));
+		check("plan allocation year 5 amounts", true, bondOrStock.contains("[60,1000000.00,0.00," + govValue + "," + sevenValue + "," + sevenValue + ",0.00,"
+				+ money(600000 * Math.pow(1.04, 5) - 600000) + ","));
+		check("plan option probability", true, bondOrStock.contains("\"code\":\"GOV_BOND\"") && bondOrStock.contains("\"probability\":0.3760000000"));
 		check("plan portfolio deterministic", bondOrStock, plan("years=5&months=0&profit=250000"));
 		check("plan portfolio short horizon conservative", true, plan("years=2&months=0&profit=93330")
 				.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":true"));
@@ -267,15 +267,15 @@ public final class CalculatorCheck {
 		check("plan portfolio none possible", true, plan("years=1&months=0&profit=3000000").contains("所有配置的達成機率都是 0"));
 		check("allocation classify", "CONSERVATIVE CONSERVATIVE BALANCED BALANCED AGGRESSIVE", AllocationProfile.classify(20) + " " + AllocationProfile.classify(25)
 				+ " " + AllocationProfile.classify(30) + " " + AllocationProfile.classify(45) + " " + AllocationProfile.classify(50));
-		check("plan options long horizon", "STOCK AGGRESSIVE", optionCodes(plan("years=10&months=0&profit=1500000")));
+		check("plan options long horizon", "STOCK_CORE STOCK_GROWTH STOCK_AGGRESSIVE STOCK_VOLATILE", optionCodes(plan("years=10&months=0&profit=1500000")));
 		String small = plan("years=5&months=0&profit=51010");
-		check("plan options small target", "DEPOSIT BOND", optionCodes(small));
-		//目標很容易時，定存上限讓配置不會變成「定存 70%＋股票 30%」這種組合
-		check("plan portfolio deposit cap", true, small.contains("\"deposit\":50,\"bond\":50,\"stock\":0,") && small.contains("\"deposit\":30,\"bond\":40,\"stock\":30,"));
+		check("plan options small target", "DEPOSIT GOV_BOND", optionCodes(small));
+		//目標很容易時，定存上限讓配置不會變成「定存 70%」這種組合
+		check("plan portfolio deposit cap", true, small.contains("\"weights\":[50,45,0,5]") && small.contains("\"weights\":[15,50,5,30]"));
 		check("plan zero profit only deposit", "DEPOSIT", optionCodes(plan("years=3&months=6&profit=0")));
 		String shortBond = plan("years=2&months=0&profit=93330");
-		check("plan short horizon options capped", "BOND BALANCED STOCK", optionCodes(shortBond));
-		check("plan short horizon stock flagged", true, shortBond.contains("\"code\":\"STOCK\",\"name\":\"股票／基金\",\"fit\":\"COMFORTABLE\",\"horizonOk\":false"));
+		check("plan short horizon options capped", "GOV_BOND CORPORATE_BOND STOCK_INCOME STOCK_CORE", optionCodes(shortBond));
+		check("plan short horizon stock flagged", true, shortBond.contains("\"code\":\"STOCK_CORE\",\"name\":\"穩健型股票\",\"fit\":\"COMFORTABLE\",\"horizonOk\":false"));
 		check("plan speculative single option", "SPECULATIVE", optionCodes(doubled));
 
 		//蒙地卡羅模擬：波動為 0 時與逐月複利公式相同；常態亂數的平均與標準差；中位數接近一般行情
@@ -303,7 +303,7 @@ public final class CalculatorCheck {
 		check("plan solver no monthly = formula", true, Math.abs(InvestmentPlanner.requiredRate(1000000, 0, 60, 250000) - (Math.pow(1.25, 0.2) - 1)) < 1e-12);
 		String monthlyOnly = call("/api/plan", "principal=0&monthlyFixed=10%2C000&years=10&months=0&profit=500%2C000");
 		check("plan monthly only", true, monthlyOnly.contains("\"invested\":1200000.00,") && monthlyOnly.contains("\"requiredRate\":0.0677440000,")
-				&& monthlyOnly.contains("\"tier\":\"BALANCED\""));
+				&& monthlyOnly.contains("\"tier\":\"CORPORATE_BOND\""));
 		String ranged = call("/api/plan", "principal=1%2C000%2C000&monthlyFixed=10%2C000&floatMin=0&floatMax=5%2C000&years=5&months=0&profit=400%2C000&round=1");
 		check("plan floating expected midpoint", true, ranged.contains("\"monthly\":12500,\"invested\":1750000,"));
 		check("plan floating high and low", true, ranged.contains("\"high\":{\"monthly\":15000,\"invested\":1900000,\"rate\":0.0502740000,")
@@ -337,7 +337,7 @@ public final class CalculatorCheck {
 	/** 投資計畫回應中 options 的類別代碼，以空白分隔 */
 	private static String optionCodes(String json) {
 		String options = json.substring(json.indexOf("\"options\":"), json.indexOf("\"portfolioSummary\":"));
-		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"code\":\"([A-Z]+)\"").matcher(options);
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"code\":\"([A-Z_]+)\"").matcher(options);
 		StringBuilder codes = new StringBuilder();
 		while (matcher.find()) {
 			codes.append(codes.length() == 0 ? "" : " ").append(matcher.group(1));

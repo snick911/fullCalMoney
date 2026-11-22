@@ -62,14 +62,19 @@ public final class MarketSimulator {
 			double balance = principal;
 			for (int k = 0; k < stepMonths.length; k++) {
 				double logGrowth = drift * stepYears[k] + volatility * stepScale[k] * shocks[path][k];
-				double growth = Math.exp(logGrowth);
-				balance *= growth;
-				if (monthly != 0) {
-					//每月月初投入，該段成長平均分攤到每個月：Σ g^j（j = 1..n）= g(G - 1)/(g - 1)，g 為月成長
-					int n = stepMonths[k];
-					double monthGrowth = Math.exp(logGrowth / n);
-					balance += monthly * (Math.abs(monthGrowth - 1) < EPSILON ? n : monthGrowth * (growth - 1) / (monthGrowth - 1));
+				if (monthly == 0) {
+					balance *= Math.exp(logGrowth);
+					continue;
 				}
+				//每月月初投入，該段成長平均分攤到每個月：Σ g^j（j = 1..n）= g(G - 1)/(g - 1)，g 為月成長、G = g^n
+				//（連乘取代第二次 exp，配置搜尋時每步只算一次 exp）
+				int n = stepMonths[k];
+				double monthGrowth = Math.exp(logGrowth / n);
+				double growth = monthGrowth;
+				for (int j = 1; j < n; j++) {
+					growth *= monthGrowth;
+				}
+				balance = balance * growth + monthly * (Math.abs(monthGrowth - 1) < EPSILON ? n : monthGrowth * (growth - 1) / (monthGrowth - 1));
 			}
 			finals[path] = balance;
 		}

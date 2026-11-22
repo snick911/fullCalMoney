@@ -104,9 +104,9 @@ public class InvestmentPlan {
 	}
 
 	/**
-	 * 資產配置的逐年試算一列：第 months 個月底，定存／債券／股票各自的累積投入與金額
+	 * 資產配置的逐年試算一列：第 months 個月底，定存／公債／公司債／股票各自的累積投入與金額
 	 *
-	 * <p>本金與每月投資依配置比例分到三種資產，之後各自以一般行情報酬率逐月複利，不做再平衡。</p>
+	 * <p>本金與每月投資依配置比例分到四種資產，之後各自以一般行情報酬率逐月複利，不做再平衡。</p>
 	 */
 	public static final class AllocationRow {
 
@@ -124,24 +124,23 @@ public class InvestmentPlan {
 			return months;
 		}
 
-		/** 定存、債券、股票的累積投入 */
+		/** 定存、公債、公司債、股票的累積投入 */
 		public BigDecimal[] getInvested() {
 			return invested;
 		}
 
-		/** 定存、債券、股票的金額 */
+		/** 定存、公債、公司債、股票的金額 */
 		public BigDecimal[] getValues() {
 			return values;
 		}
 	}
 
-	/** 一種資產配置類型的最佳配置（定存／債券／股票）：模擬達成機率最高者 */
+	/** 一種資產配置類型的最佳配置（定存／公債／公司債／股票＋股票等級）：模擬達成機率最高者 */
 	public static final class Portfolio {
 
 		private final AllocationProfile profile;
-		private final int deposit;
-		private final int bond;
-		private final int stock;
+		private final int[] weights;
+		private final InvestmentTier stockLevel;
 		private final BigDecimal typicalRate;
 		private final BigDecimal volatility;
 		private final BigDecimal probability;
@@ -151,18 +150,19 @@ public class InvestmentPlan {
 		private final boolean horizonOk;
 		private final int candidates;
 		private final int reachable;
+		private final int simulated;
 		private final List<AllocationRow> rows;
 
-		public Portfolio(AllocationProfile profile, int[] weights, BigDecimal typicalRate, BigDecimal volatility, BigDecimal probability,
-				BigDecimal[] outcomes, boolean horizonOk, int candidates, int reachable, List<AllocationRow> rows) {
+		public Portfolio(Candidate best, BigDecimal typicalRate, BigDecimal volatility, BigDecimal[] outcomes, boolean horizonOk, int candidates,
+				int reachable, int simulated, List<AllocationRow> rows) {
+			this.profile = best.getProfile();
+			this.weights = best.getWeights();
+			this.stockLevel = best.getStockLevel();
+			this.probability = BigDecimal.valueOf(best.getProbability());
+			this.simulated = simulated;
 			this.rows = rows;
-			this.profile = profile;
-			this.deposit = weights[0];
-			this.bond = weights[1];
-			this.stock = weights[2];
 			this.typicalRate = typicalRate;
 			this.volatility = volatility;
-			this.probability = probability;
 			this.pessimistic = outcomes[0];
 			this.median = outcomes[1];
 			this.optimistic = outcomes[2];
@@ -205,9 +205,14 @@ public class InvestmentPlan {
 			return candidates;
 		}
 
-		/** 其中幾種達成機率超過一半 */
+		/** 其中約幾種（近似公式估計）達成機率超過一半 */
 		public int getReachable() {
 			return reachable;
+		}
+
+		/** 篩選後實際以蒙地卡羅模擬的配置數 */
+		public int getSimulated() {
+			return simulated;
 		}
 
 		/** 逐年試算：各資產的累積投入與金額（一般行情） */
@@ -215,16 +220,14 @@ public class InvestmentPlan {
 			return rows;
 		}
 
-		public int getDeposit() {
-			return deposit;
+		/** 定存、公債、公司債、股票的比例（%） */
+		public int[] getWeights() {
+			return weights;
 		}
 
-		public int getBond() {
-			return bond;
-		}
-
-		public int getStock() {
-			return stock;
+		/** 股票部位的等級，股票比例為 0 時為 null */
+		public InvestmentTier getStockLevel() {
+			return stockLevel;
 		}
 
 		/** 一般行情（中位數）的加權年報酬率 */
@@ -242,39 +245,33 @@ public class InvestmentPlan {
 	public static final class Candidate {
 
 		private final AllocationProfile profile;
-		private final int deposit;
-		private final int bond;
-		private final int stock;
+		private final int[] weights;
+		private final InvestmentTier stockLevel;
 		private final double typicalRate;
 		private final double volatility;
-		private final double probability;
-		private final double median;
+		private double probability;
 
-		public Candidate(AllocationProfile profile, int[] weights, double typicalRate, double volatility, double probability, double median) {
+		public Candidate(AllocationProfile profile, int[] weights, InvestmentTier stockLevel, double typicalRate, double volatility, double probability) {
 			this.profile = profile;
-			this.deposit = weights[0];
-			this.bond = weights[1];
-			this.stock = weights[2];
+			this.weights = weights;
+			this.stockLevel = stockLevel;
 			this.typicalRate = typicalRate;
 			this.volatility = volatility;
 			this.probability = probability;
-			this.median = median;
 		}
 
 		public AllocationProfile getProfile() {
 			return profile;
 		}
 
-		public int getDeposit() {
-			return deposit;
+		/** 定存、公債、公司債、股票的比例（%） */
+		public int[] getWeights() {
+			return weights;
 		}
 
-		public int getBond() {
-			return bond;
-		}
-
-		public int getStock() {
-			return stock;
+		/** 股票部位的等級，股票比例為 0 時為 null */
+		public InvestmentTier getStockLevel() {
+			return stockLevel;
 		}
 
 		public double getTypicalRate() {
@@ -285,14 +282,13 @@ public class InvestmentPlan {
 			return volatility;
 		}
 
-		/** 模擬的達成機率 */
+		/** 達成機率：篩選時為近似公式的估計，模擬後改為蒙地卡羅的結果 */
 		public double getProbability() {
 			return probability;
 		}
 
-		/** 期滿金額中位數 */
-		public double getMedian() {
-			return median;
+		public void setProbability(double probability) {
+			this.probability = probability;
 		}
 	}
 
