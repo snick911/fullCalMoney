@@ -368,7 +368,14 @@
     COMFORTABLE: ['一般行情可達成', ''],
     STRETCH: ['需行情較好', ' option__tag--warn'],
   };
-  const PORTFOLIO_FITS = { ...FIT_TAGS, INFEASIBLE: ['不足', ' option__tag--danger'] };
+  //模擬達成機率的程度：75% 以上、50% 以上、25% 以上、其他
+  const CHANCES = {
+    HIGH: ['把握高', ''],
+    LIKELY: ['有機會', ''],
+    STRETCH: ['需行情較好', ' option__tag--warn'],
+    LOW: ['不太可能', ' option__tag--danger'],
+  };
+  const chancePercent = (ratio) => `${Math.round(Number(ratio) * 100)}%`;
 
   /** 一個方案的卡片：適合程度、標的、風險、兩種行情的期滿金額 */
   function optionCard(o, twd, tier) {
@@ -380,7 +387,8 @@
       + '<li class="option__projection-head"><span>年報酬率假設</span><span>期滿金額（約）</span><span></span></li>'
       + `<li><span>一般行情 ${fmt.percentFixed(o.typicalRate)}</span><span>${twd(o.typicalEnd)}</span>`
       + `${o.typicalReached ? '<span class="is-reached">達標</span>' : '<span class="is-short">未達標</span>'}</li>`
-      + `<li><span>行情好 ${fmt.percentFixed(o.maxRate)}</span><span>${twd(o.maxEnd)}</span><span class="is-reached">達標</span></li></ul>`;
+      + `<li><span>行情好 ${fmt.percentFixed(o.maxRate)}</span><span>${twd(o.maxEnd)}</span><span class="is-reached">達標</span></li>`
+      + `<li class="option__probability"><span>模擬達成機率</span><span>${chancePercent(o.probability)}</span><span></span></li></ul>`;
     return `<section class="option" data-fit="${escapeHtml(o.fit)}">`
       + `<div class="option__head"><h3 class="option__name">${escapeHtml(o.name)}</h3>${tags}</div>`
       + `<p class="option__instruments">${escapeHtml(o.instruments)}</p>`
@@ -425,25 +433,33 @@
 
     $('[data-options]', scope).innerHTML = d.options.map((o) => optionCard(o, twd, d.tier)).join('');
 
-    //資產配置：三種參考配置與我的配置
+    //資產配置：保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋、蒙地卡羅模擬）
     setOut(scope, 'portfolioSummary', d.portfolioSummary);
-    const custom = d.portfolios.find((p) => p.custom);
-    setOut(scope, 'customType', custom ? `屬於「${custom.name}」（股票 ${custom.stock}%）` : '');
+    const mix = (deposit, bond, stock) => `<span class="mix"><span class="mix__bar" aria-hidden="true" data-mix="${deposit},${bond},${stock}">`
+      + `<i></i><i></i><i></i></span>${deposit}／${bond}／${stock}</span>`;
     const body = $('tbody[data-portfolio-rows]', scope);
     body.innerHTML = d.portfolios.map((p) => {
-      const [fitText, fitClass] = PORTFOLIO_FITS[p.fit];
-      const label = p.custom ? `我的配置（${escapeHtml(p.name)}）` : escapeHtml(p.name);
+      const [chanceText, chanceClass] = CHANCES[p.chance];
       const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
-      const tags = `<span class="option__tag${fitClass}">${fitText}</span>`
+      const tags = `<span class="option__tag${chanceClass}">${chanceText}</span>`
         + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">期間短於 ${escapeHtml(p.horizon)}</span>`);
-      return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${label}${badge}</th>`
-        + `<td><span class="mix"><span class="mix__bar" aria-hidden="true"><i></i><i></i><i></i></span>${p.deposit}／${p.bond}／${p.stock}</span></td>`
-        + `<td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.maxRate)}</td><td>${twd(p.typicalEnd)}</td><td>${tags}</td></tr>`;
+      return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${escapeHtml(p.name)}${badge}`
+        + `<span class="portfolio__count">${p.candidates} 種中 ${p.reachable} 種機率過半</span></th>`
+        + `<td>${mix(p.deposit, p.bond, p.stock)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
+        + `<td><span class="portfolio__chance">${chancePercent(p.probability)}</span><span class="portfolio__tags">${tags}</span></td>`
+        + `<td>${twd(p.median)}<span class="portfolio__count">${twd(p.pessimistic)}～${twd(p.optimistic)}</span></td></tr>`;
     }).join('');
+
+    //全部試算結果：[類型代碼, 類型, 定存, 債券, 股票, 一般行情, 波動, 機率, 中位數, 是否為最佳]
+    setOut(scope, 'candidateCount', `${d.candidates.length} 種`);
+    $('tbody[data-candidate-rows]', scope).innerHTML = d.candidates.map((c, i) =>
+      `<tr${c[9] ? ' class="is-recommended"' : ''}><td>${i + 1}</td><td>${escapeHtml(c[1])}${c[9] ? ' <span class="option__tag">最佳</span>' : ''}</td>`
+      + `<td>${mix(c[2], c[3], c[4])}</td><td>${fmt.percentFixed(c[5])}</td><td>${fmt.percentFixed(c[6])}</td>`
+      + `<td>${chancePercent(c[7])}</td><td>${twd(c[8])}</td></tr>`).join('');
+
     //CSP 不允許 HTML 裡的 style 屬性，長條寬度改由 CSSOM 設定
-    $$('.mix__bar', body).forEach((bar, i) => {
-      const p = d.portfolios[i];
-      [p.deposit, p.bond, p.stock].forEach((percent, j) => { bar.children[j].style.width = `${Number(percent)}%`; });
+    $$('[data-mix]', scope).forEach((bar) => {
+      bar.dataset.mix.split(',').forEach((percent, j) => { bar.children[j].style.width = `${Number(percent)}%`; });
     });
 
     $('[data-items="warnings"]', scope).innerHTML = d.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('');

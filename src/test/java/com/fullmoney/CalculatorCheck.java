@@ -26,6 +26,8 @@ import com.fullmoney.service.BondCalculator;
 import com.fullmoney.service.CurrencyConverter;
 import com.fullmoney.service.FloatingMoneyCalculator;
 import com.fullmoney.service.InvestmentPlanner;
+import com.fullmoney.service.MarketSimulator;
+import com.fullmoney.service.RangeRandom;
 import com.fullmoney.service.MoneyCalculator;
 import com.fullmoney.service.MortgageCalculator;
 import com.fullmoney.web.ApiEndpoint;
@@ -240,27 +242,55 @@ public final class CalculatorCheck {
 		//可達成的方案：從風險最低的往上列到第一個一般行情可達成的，再多列一類，最多 3 個
 		String bondOrStock = plan("years=5&months=0&profit=250000");
 		check("plan options bond or stock", "BOND BALANCED STOCK", optionCodes(bondOrStock));
-		//資產配置：報酬率依比例加權，建議期間足夠且一般行情可達成中最保守的一型
-		check("plan portfolio rates", true, bondOrStock.contains("\"deposit\":30,\"bond\":50,\"stock\":20,\"typicalRate\":0.0360000000,\"maxRate\":0.0550000000")
-				&& bondOrStock.contains("\"deposit\":10,\"bond\":40,\"stock\":50,\"typicalRate\":0.0505000000,\"maxRate\":0.0820000000"));
-		check("plan portfolio recommend aggressive", true, bondOrStock.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"custom\":false,\"recommended\":true"));
+		//資產配置：每 5% 一級搜尋、每種配置模擬 500 種走勢，每型取機率與最高者相差 2 個百分點內波動最低的配置
+		check("plan portfolio conservative best", true, bondOrStock.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":false,"
+				+ "\"deposit\":0,\"bond\":75,\"stock\":25,\"typicalRate\":0.0437500000,\"volatility\":0.0641000000,\"probability\":0.4800000000,\"chance\":\"STRETCH\""));
+		check("plan portfolio balanced best", true, bondOrStock.contains("\"code\":\"BALANCED\",\"name\":\"穩健型\",\"recommended\":true,"
+				+ "\"deposit\":0,\"bond\":60,\"stock\":40,\"typicalRate\":0.0490000000,\"volatility\":0.0834000000,\"probability\":0.5420000000,\"chance\":\"LIKELY\""));
+		check("plan portfolio aggressive not all stock", true, bondOrStock.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"recommended\":false,"
+				+ "\"deposit\":0,\"bond\":20,\"stock\":80,"));
+		check("plan portfolio search size", true, bondOrStock.contains("\"candidates\":66,\"reachable\":0") && bondOrStock.contains("\"candidates\":28,\"reachable\":14")
+				&& bondOrStock.contains("試算 139 種") && bondOrStock.contains("模擬 500 種市場走勢"));
+		check("plan candidates listed", 139, bondOrStock.split("\\[\"(CONSERVATIVE|BALANCED|AGGRESSIVE)\",").length - 1);
+		check("plan candidates chosen marked", 3, bondOrStock.split(",true\\]").length - 1);
+		check("plan option probability", true, bondOrStock.contains("\"code\":\"BOND\"") && bondOrStock.contains("\"probability\":0.3180000000"));
+		check("plan portfolio deterministic", bondOrStock, plan("years=5&months=0&profit=250000"));
 		check("plan portfolio short horizon conservative", true, plan("years=2&months=0&profit=93330")
-				.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"custom\":false,\"recommended\":true"));
-		check("plan portfolio none enough", true, plan("years=10&months=0&profit=1500000").contains("三種參考配置的報酬率都不足"));
+				.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":true"));
+		check("plan portfolio hard target aggressive", true, plan("years=20&months=0&profit=3000000")
+				.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"recommended\":true"));
+		check("plan portfolio none possible", true, plan("years=1&months=0&profit=3000000").contains("所有配置的達成機率都是 0"));
 		check("allocation classify", "CONSERVATIVE CONSERVATIVE BALANCED BALANCED AGGRESSIVE", AllocationProfile.classify(20) + " " + AllocationProfile.classify(25)
-				+ " " + AllocationProfile.classify(26) + " " + AllocationProfile.classify(45) + " " + AllocationProfile.classify(50));
-		String customMix = plan("years=5&months=0&profit=250000&allocDeposit=0&allocBond=60&allocStock=40");
-		check("plan custom portfolio", true, customMix.contains("\"code\":\"BALANCED\",\"name\":\"穩健型\",\"custom\":true,\"recommended\":false,\"deposit\":0,\"bond\":60,\"stock\":40,\"typicalRate\":0.0490000000"));
-		check("plan custom portfolio sum", true, plan("years=5&months=0&profit=250000&allocDeposit=10&allocBond=40&allocStock=40").contains("\"field\":\"allocStock\""));
-		check("plan no custom portfolio", false, bondOrStock.contains("\"custom\":true"));
+				+ " " + AllocationProfile.classify(30) + " " + AllocationProfile.classify(45) + " " + AllocationProfile.classify(50));
 		check("plan options long horizon", "STOCK AGGRESSIVE", optionCodes(plan("years=10&months=0&profit=1500000")));
 		String small = plan("years=5&months=0&profit=51010");
 		check("plan options small target", "DEPOSIT BOND", optionCodes(small));
+		//目標很容易時，定存上限讓配置不會變成「定存 70%＋股票 30%」這種組合
+		check("plan portfolio deposit cap", true, small.contains("\"deposit\":50,\"bond\":50,\"stock\":0,") && small.contains("\"deposit\":30,\"bond\":40,\"stock\":30,"));
 		check("plan zero profit only deposit", "DEPOSIT", optionCodes(plan("years=3&months=6&profit=0")));
 		String shortBond = plan("years=2&months=0&profit=93330");
 		check("plan short horizon options capped", "BOND BALANCED STOCK", optionCodes(shortBond));
 		check("plan short horizon stock flagged", true, shortBond.contains("\"code\":\"STOCK\",\"name\":\"股票／基金\",\"fit\":\"COMFORTABLE\",\"horizonOk\":false"));
 		check("plan speculative single option", "SPECULATIVE", optionCodes(doubled));
+
+		//蒙地卡羅模擬：波動為 0 時與逐月複利公式相同；常態亂數的平均與標準差；中位數接近一般行情
+		MarketSimulator noRisk = new MarketSimulator(30);
+		double flat = noRisk.simulate(1000000, 10000, 0.05, 0)[0];
+		check("simulator zero volatility = formula", true, Math.abs(flat - InvestmentPlanner.futureValue(1000000, 10000, 0.05, 30)) < 1e-4);
+		RangeRandom gaussian = new RangeRandom(1);
+		double sum = 0;
+		double squares = 0;
+		for (int i = 0; i < 20000; i++) {
+			double z = gaussian.nextGaussian();
+			sum += z;
+			squares += z * z;
+		}
+		double mean = sum / 20000;
+		check("random gaussian mean and sd", true, Math.abs(mean) < 0.03 && Math.abs(Math.sqrt(squares / 20000 - mean * mean) - 1) < 0.03);
+		double median = MarketSimulator.percentile(new MarketSimulator(60).simulate(1000000, 0, 0.07, 0.18), 0.5);
+		check("simulator median near typical", true, Math.abs(median / (1000000 * Math.pow(1.07, 5)) - 1) < 0.05);
+		check("simulator probability and percentile", "0.5 5.0", MarketSimulator.probability(new double[] { 1, 2, 3, 4 }, 2.5) + " "
+				+ MarketSimulator.percentile(new double[] { 0, 10 }, 0.5));
 
 		//每月投資：以二分法求出的報酬率，期滿金額要剛好等於總投入 + 期望獲利
 		double monthlyRate = InvestmentPlanner.requiredRate(0, 10000, 120, 500000);
@@ -366,6 +396,10 @@ public final class CalculatorCheck {
 		} catch (BadRequestException e) {
 			check(name, true, true);
 		}
+	}
+
+	private static void check(String name, int expected, int actual) {
+		check(name, String.valueOf(expected), String.valueOf(actual));
 	}
 
 	private static void check(String name, boolean expected, boolean actual) {

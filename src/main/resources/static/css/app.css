@@ -547,6 +547,13 @@ select.input option { background: var(--surface); color: var(--fg); }
 /* 資產配置：定存／債券／股票三段長條，由淺到深 */
 .portfolio__summary { margin: .45rem 0 0; }
 .portfolio__rule { margin: .45rem 0 0; color: var(--muted); font-size: .8125rem; }
+.portfolio__count { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
+.portfolio__chance { display: block; color: var(--accent); font-weight: 700; }
+.portfolio__tags { display: block; margin-top: .15rem; }
+.candidates { margin-top: .75rem; }
+.candidates .table-wrap { max-height: 24rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.option__probability { margin-top: .3rem; padding-top: .3rem; border-top: 1px dashed var(--border); font-weight: 700; }
+.option__probability span:nth-child(2) { color: var(--accent); }
 .mix { display: inline-flex; align-items: center; gap: .5rem; }
 .mix__bar { display: flex; width: 4.5rem; height: .55rem; border-radius: 999px; overflow: hidden; background: var(--stripe); }
 .mix__bar i:nth-child(1) { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
@@ -554,10 +561,6 @@ select.input option { background: var(--surface); color: var(--fg); }
 .mix__bar i:nth-child(3) { background: var(--accent); }
 .data-table tbody tr.is-recommended > * { background: var(--accent-soft); }
 .data-table .option__tag + .option__tag { margin-left: .25rem; }
-
-/* 我的資產配置：三個比例欄位 */
-.alloc__inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
-.alloc__result { min-height: 1.4em; margin: .4rem 0 .5rem; color: var(--muted); font-size: .875rem; font-weight: 600; }
 
 /* 新台幣債券不顯示換回台幣的欄位 */
 .page.is-domestic [data-foreign] { display: none; }

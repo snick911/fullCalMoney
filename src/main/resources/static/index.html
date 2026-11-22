@@ -535,24 +535,6 @@
             </div>
           </div>
         </fieldset>
-        <fieldset class="range">
-          <legend>我的資產配置 <span class="range__hint">（比例合計 100%）</span></legend>
-          <div class="alloc__inputs">
-            <div class="field">
-              <label for="p-alloc-deposit">定存</label>
-              <div class="input-wrap"><input class="input" id="p-alloc-deposit" name="allocDeposit" inputmode="numeric" value="0"><span class="input-affix">%</span></div>
-            </div>
-            <div class="field">
-              <label for="p-alloc-bond">債券</label>
-              <div class="input-wrap"><input class="input" id="p-alloc-bond" name="allocBond" inputmode="numeric" value="60"><span class="input-affix">%</span></div>
-            </div>
-            <div class="field">
-              <label for="p-alloc-stock">股票</label>
-              <div class="input-wrap"><input class="input" id="p-alloc-stock" name="allocStock" inputmode="numeric" value="40"><span class="input-affix">%</span></div>
-            </div>
-          </div>
-          <p class="alloc__result" data-out="customType"></p>
-        </fieldset>
       </div>
       <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
@@ -588,11 +570,23 @@
           <p class="portfolio__summary" data-out="portfolioSummary"></p>
           <div class="table-wrap table-wrap--auto spread" tabindex="0" aria-label="資產配置，可捲動">
             <table class="data-table data-table--summary">
-              <thead><tr><th scope="col">配置</th><th scope="col">定存／債券／股票</th><th scope="col">一般行情</th><th scope="col">行情好</th><th scope="col">期滿金額（一般行情）</th><th scope="col">評估</th></tr></thead>
+              <thead><tr><th scope="col">類型</th><th scope="col">最佳配置（定存／債券／股票）</th><th scope="col">一般行情</th><th scope="col">預估波動</th><th scope="col">達成機率</th><th scope="col">期滿金額 中位數（10%～90%）</th></tr></thead>
               <tbody data-portfolio-rows></tbody>
             </table>
           </div>
-          <p class="portfolio__rule">依股票比例分類：25% 以下保守型、26%～45% 穩健型、超過 45% 積極型。報酬率依比例加權（定存 1.5%～2%、債券 3.5%～5%、股票 7%～12%）。長條由淺到深為定存、債券、股票。</p>
+          <details class="sublist candidates">
+            <summary><span>查看全部試算結果</span><span class="badge" data-out="candidateCount"></span></summary>
+            <div class="sublist__body">
+              <p class="sublist__desc">依達成機率由高到低排序；標示「最佳」的是各類型挑中的配置（機率與最高者相差不到 2 個百分點時取波動較低的）。</p>
+              <div class="table-wrap" tabindex="0" aria-label="全部試算結果，可捲動">
+                <table class="data-table">
+                  <thead><tr><th scope="col">排名</th><th scope="col">類型</th><th scope="col">定存／債券／股票</th><th scope="col">一般行情</th><th scope="col">預估波動</th><th scope="col">達成機率</th><th scope="col">期滿中位數</th></tr></thead>
+                  <tbody data-candidate-rows></tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+          <p class="portfolio__rule">定存、債券、股票以每 5% 一級列出所有組合，依股票比例分類（25% 以下保守型、30%～45% 穩健型、50% 以上積極型），定存上限為保守型 50%、穩健型 30%、積極型 20%。每種配置以蒙地卡羅模擬 500 種市場走勢（每年報酬為對數常態分布，中位數為一般行情報酬率），計算期滿金額達到目標的機率；每一型挑出機率最高的配置，相差不到 2 個百分點時取波動較低的。報酬率依比例加權（定存 1.5%、債券 3.5%、股票 7%）；預估波動假設定存 0%、債券 5%、股票 18%、股債相關係數 0.2。長條由淺到深為定存、債券、股票。</p>
         </section>
         <ul class="advice__list advice__list--warn" data-items="warnings"></ul>
         <div data-suggestions hidden>

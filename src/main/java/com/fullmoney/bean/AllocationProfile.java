@@ -1,33 +1,30 @@
 package com.fullmoney.bean;
 
 /**
- * 資產配置類型：依股票比例分為保守型、穩健型、積極型，每型有一組參考配置（定存／債券／股票）
+ * 資產配置類型：依股票比例分為保守型（25% 以下）、穩健型（26%～45%）、積極型（超過 45%）
  *
- * <p>配置的年報酬率 = 各資產比例 × 該類標的的報酬率（定存用保本型、債券用債券、股票用股票／基金）。</p>
+ * <p>各類型的最佳配置由 {@link com.fullmoney.service.InvestmentPlanner} 從每 5% 一級的所有組合中挑選。
+ * 定存有上限（保守型 50%、穩健型 30%、積極型 20%）：現金保留適量即可，太多會被通膨侵蝕，也不符合該類型的性質。</p>
  */
 public enum AllocationProfile {
 
-	CONSERVATIVE("保守型", 30, 50, 20, 25, 1, "1 年以上", "以債券與定存為主，波動小，適合重視本金安全的資金。"),
+	CONSERVATIVE("保守型", 25, 50, 1, "1 年以上", "以債券與定存為主，波動小，適合重視本金安全的資金。"),
 
-	BALANCED("穩健型", 20, 45, 35, 45, 3, "3 年以上", "股債兼顧、追求穩定成長，短期仍可能小幅虧損。"),
+	BALANCED("穩健型", 45, 30, 3, "3 年以上", "股債兼顧、追求穩定成長，短期仍可能小幅虧損。"),
 
-	AGGRESSIVE("積極型", 10, 40, 50, 100, 5, "5 年以上", "股票占一半以上，長期報酬較高，但短期可能下跌 15%～25%。");
+	AGGRESSIVE("積極型", 100, 20, 5, "5 年以上", "股票占一半以上，長期報酬較高，但短期可能下跌 15%～25%。");
 
 	private final String name;
-	private final int deposit;
-	private final int bond;
-	private final int stock;
 	private final int maxStock;
+	private final int maxDeposit;
 	private final int minYears;
 	private final String horizon;
 	private final String note;
 
-	AllocationProfile(String name, int deposit, int bond, int stock, int maxStock, int minYears, String horizon, String note) {
+	AllocationProfile(String name, int maxStock, int maxDeposit, int minYears, String horizon, String note) {
 		this.name = name;
-		this.deposit = deposit;
-		this.bond = bond;
-		this.stock = stock;
 		this.maxStock = maxStock;
+		this.maxDeposit = maxDeposit;
 		this.minYears = minYears;
 		this.horizon = horizon;
 		this.note = note;
@@ -51,24 +48,14 @@ public enum AllocationProfile {
 		return name;
 	}
 
-	/** 參考配置的定存比例（%） */
-	public int getDeposit() {
-		return deposit;
-	}
-
-	/** 參考配置的債券比例（%） */
-	public int getBond() {
-		return bond;
-	}
-
-	/** 參考配置的股票比例（%） */
-	public int getStock() {
-		return stock;
-	}
-
 	/** 屬於此類型的股票比例上限（%） */
 	public int getMaxStock() {
 		return maxStock;
+	}
+
+	/** 此類型的定存比例上限（%） */
+	public int getMaxDeposit() {
+		return maxDeposit;
 	}
 
 	/** 建議的最短投資年數 */

@@ -12,6 +12,7 @@ import com.fullmoney.bean.InvestmentPlan;
 import com.fullmoney.bean.InvestmentPlan.Fit;
 import com.fullmoney.bean.InvestmentTier;
 import com.fullmoney.service.InvestmentPlanner;
+import com.fullmoney.service.MarketSimulator;
 import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.BadRequestException;
 import com.fullmoney.web.Numbers;
@@ -21,9 +22,8 @@ import com.fullmoney.web.Params;
  * 投資計畫：算出需要的年化報酬率，列出可以達成的方案與配置建議
  *
  * <p>參數：principal 投資本金（可為 0）、monthlyFixed 每月固定投資金額、floatMin / floatMax 每月浮動投資金額的區間（三者選填，預設 0）、
- * years 投資年數、months 月數(0～11)、profit 期望獲利金額、allocDeposit / allocBond / allocStock 我的資產配置（%，合計 100，選填）、
- * round=1 金額四捨五入到整數</p>
- * <p>options 為可考慮的方案（由低風險到高風險），portfolios 為保守型、穩健型、積極型與自訂配置的評估，
+ * years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數</p>
+ * <p>options 為可考慮的方案（由低風險到高風險），portfolios 為保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋），
  * floating 為浮動投資取上限 high／下限 low 時的情況（沒有浮動區間時為 null），
  * rows 每列為 [第幾個月底, 累積投入, 金額, 累積獲利, 累積報酬率]</p>
  */
@@ -59,9 +59,7 @@ public final class PlanApi extends ApiEndpoint {
 		if (principal.signum() == 0 && monthlyFixed.signum() == 0 && floatMax.signum() == 0) {
 			throw new BadRequestException("principal", "請輸入投資本金或每月投資金額。");
 		}
-		int[] custom = customAllocation(params);
-
-		InvestmentPlan plan = planner.plan(principal, monthlyFixed, floatMin, floatMax, months, profit, custom);
+		InvestmentPlan plan = planner.plan(principal, monthlyFixed, floatMin, floatMax, months, profit);
 		BigDecimal target = plan.getTarget();
 
 		List<Map<String, Object>> options = new ArrayList<>();
@@ -83,6 +81,7 @@ public final class PlanApi extends ApiEndpoint {
 				out.put("typicalReached", option.getTypicalEnd().compareTo(target) >= 0 || option.getFit() == Fit.COMFORTABLE);
 				out.put("maxRate", Values.ratio(tier.getMaxRate()));
 				out.put("maxEnd", Values.money(option.getMaxEnd(), whole));
+				out.put("probability", Values.ratio(option.getProbability()));
 			}
 			options.add(out);
 		}
@@ -117,6 +116,7 @@ public final class PlanApi extends ApiEndpoint {
 		out.put("options", options);
 		out.put("portfolioSummary", portfolioSummary(plan));
 		out.put("portfolios", portfolios(plan, whole));
+		out.put("candidates", candidates(plan, whole));
 		out.put("warnings", warnings(plan));
 		out.put("suggestions", suggestions(plan));
 		out.put("rows", rows);
@@ -134,21 +134,6 @@ public final class PlanApi extends ApiEndpoint {
 		return out;
 	}
 
-	/** 我的資產配置（定存／債券／股票 %）：三格都沒送出時為 null，有送出時空白視為 0，合計須為 100 */
-	private static int[] customAllocation(Params params) {
-		if (!params.has("allocDeposit") && !params.has("allocBond") && !params.has("allocStock")) {
-			return null;
-		}
-		int deposit = params.optionalInteger("allocDeposit", "定存比例", 0, 100, 0);
-		int bond = params.optionalInteger("allocBond", "債券比例", 0, 100, 0);
-		int stock = params.optionalInteger("allocStock", "股票比例", 0, 100, 0);
-		int sum = deposit + bond + stock;
-		if (sum != 100) {
-			throw new BadRequestException("allocStock", "資產配置的定存、債券、股票比例合計必須是 100%（目前 " + sum + "%）。");
-		}
-		return new int[] { deposit, bond, stock };
-	}
-
 	private static List<Map<String, Object>> portfolios(InvestmentPlan plan, boolean whole) {
 		List<Map<String, Object>> list = new ArrayList<>();
 		for (InvestmentPlan.Portfolio portfolio : plan.getPortfolios()) {
@@ -156,66 +141,91 @@ public final class PlanApi extends ApiEndpoint {
 			Map<String, Object> out = new LinkedHashMap<>();
 			out.put("code", profile.name());
 			out.put("name", profile.getName());
-			out.put("custom", portfolio.isCustom());
-			out.put("recommended", !portfolio.isCustom() && profile == plan.getRecommendedProfile());
+			out.put("recommended", profile == plan.getRecommendedProfile());
 			out.put("deposit", portfolio.getDeposit());
 			out.put("bond", portfolio.getBond());
 			out.put("stock", portfolio.getStock());
 			out.put("typicalRate", Values.ratio(portfolio.getTypicalRate()));
-			out.put("maxRate", Values.ratio(portfolio.getMaxRate()));
-			out.put("typicalEnd", Values.money(portfolio.getTypicalEnd(), whole));
-			out.put("fit", portfolio.getFit().name());
+			out.put("volatility", Values.ratio(portfolio.getVolatility()));
+			out.put("probability", Values.ratio(portfolio.getProbability()));
+			out.put("chance", chance(portfolio.getProbability().doubleValue()));
+			out.put("pessimistic", Values.money(portfolio.getPessimistic(), whole));
+			out.put("median", Values.money(portfolio.getMedian(), whole));
+			out.put("optimistic", Values.money(portfolio.getOptimistic(), whole));
 			out.put("horizonOk", portfolio.isHorizonOk());
 			out.put("horizon", profile.getHorizon());
-			out.put("note", profile.getNote());
+			out.put("candidates", portfolio.getCandidates());
+			out.put("reachable", portfolio.getReachable());
 			list.add(out);
 		}
 		return list;
 	}
 
-	/** 建議的資產配置與自訂配置的評估 */
+	/**
+	 * 所有試算過的配置（依達成機率排序），每筆為 [類型代碼, 類型, 定存, 債券, 股票, 一般行情報酬率, 預估波動, 達成機率, 期滿金額中位數,
+	 * 是否為該型的最佳配置]
+	 */
+	private static List<Object[]> candidates(InvestmentPlan plan, boolean whole) {
+		List<Object[]> list = new ArrayList<>();
+		for (InvestmentPlan.Candidate candidate : plan.getCandidates()) {
+			boolean chosen = false;
+			for (InvestmentPlan.Portfolio portfolio : plan.getPortfolios()) {
+				chosen |= portfolio.getProfile() == candidate.getProfile() && portfolio.getDeposit() == candidate.getDeposit()
+						&& portfolio.getBond() == candidate.getBond() && portfolio.getStock() == candidate.getStock();
+			}
+			list.add(new Object[] { candidate.getProfile().name(), candidate.getProfile().getName(), candidate.getDeposit(), candidate.getBond(),
+					candidate.getStock(), Values.ratio(BigDecimal.valueOf(candidate.getTypicalRate())),
+					BigDecimal.valueOf(candidate.getVolatility()).setScale(4, RoundingMode.HALF_UP),
+					BigDecimal.valueOf(candidate.getProbability()).setScale(4, RoundingMode.HALF_UP),
+					Values.money(BigDecimal.valueOf(candidate.getMedian()), whole), chosen });
+		}
+		return list;
+	}
+
+	/** 達成機率的程度：HIGH 75% 以上、LIKELY 50% 以上、STRETCH 25% 以上、LOW 其他 */
+	private static String chance(double probability) {
+		if (probability >= 0.75) {
+			return "HIGH";
+		}
+		if (probability >= 0.5) {
+			return "LIKELY";
+		}
+		return probability >= 0.25 ? "STRETCH" : "LOW";
+	}
+
+	/** 搜尋範圍、模擬方式與建議的資產配置 */
 	private static String portfolioSummary(InvestmentPlan plan) {
-		StringBuilder text = new StringBuilder();
-		InvestmentPlan.Portfolio custom = null;
+		int total = 0;
+		int reachable = 0;
 		InvestmentPlan.Portfolio recommended = null;
 		for (InvestmentPlan.Portfolio portfolio : plan.getPortfolios()) {
-			if (portfolio.isCustom()) {
-				custom = portfolio;
-			} else if (portfolio.getProfile() == plan.getRecommendedProfile()) {
+			total += portfolio.getCandidates();
+			reachable += portfolio.getReachable();
+			if (portfolio.getProfile() == plan.getRecommendedProfile()) {
 				recommended = portfolio;
 			}
 		}
+		StringBuilder text = new StringBuilder("以每 5% 一級試算 ").append(total).append(" 種定存／債券／股票配置，每種模擬 ")
+				.append(MarketSimulator.PATHS).append(" 種市場走勢，其中 ").append(reachable).append(" 種達成機率超過 50%。");
 		if (recommended == null) {
-			text.append("三種參考配置的報酬率都不足以達成目標，需要提高股票比例、延長期間或調整目標。");
-		} else {
-			text.append("建議資產配置：「").append(recommended.getProfile().getName()).append("」（").append(mix(recommended))
-					.append("），一般行情年化約 ").append(percent(recommended.getTypicalRate())).append(fitText(recommended)).append("。");
+			return text.append("所有配置的達成機率都是 0，需要延長期間、增加投入或調整目標。").toString();
 		}
-		if (custom != null) {
-			text.append("你的配置（").append(mix(custom)).append("）屬於「").append(custom.getProfile().getName()).append("」，一般行情年化約 ")
-					.append(percent(custom.getTypicalRate())).append(fitText(custom)).append("。");
+		text.append("建議「").append(recommended.getProfile().getName()).append("」：").append(mix(recommended)).append("，達成機率約 ")
+				.append(wholePercent(recommended.getProbability())).append("，期滿金額中位數約 $").append(Numbers.group(recommended.getMedian(), 0))
+				.append("（10% 的情況低於 $").append(Numbers.group(recommended.getPessimistic(), 0)).append("）");
+		if (!recommended.isHorizonOk()) {
+			text.append("，但投資期間短於建議的 ").append(recommended.getProfile().getHorizon());
 		}
-		return text.toString();
+		return text.append("。").toString();
 	}
 
 	private static String mix(InvestmentPlan.Portfolio portfolio) {
 		return "定存 " + portfolio.getDeposit() + "%、債券 " + portfolio.getBond() + "%、股票 " + portfolio.getStock() + "%";
 	}
 
-	private static String fitText(InvestmentPlan.Portfolio portfolio) {
-		String fit;
-		switch (portfolio.getFit()) {
-		case COMFORTABLE:
-			fit = "，可以達成目標";
-			break;
-		case STRETCH:
-			fit = "，需要行情較好才能達成";
-			break;
-		default:
-			fit = "，行情好也達不到目標";
-		}
-		return portfolio.isHorizonOk() || portfolio.getFit() == Fit.INFEASIBLE ? fit
-				: fit + "，但投資期間短於建議的 " + portfolio.getProfile().getHorizon();
+	/** ex. 0.6234 → 62% */
+	private static String wholePercent(BigDecimal ratio) {
+		return ratio.movePointRight(2).setScale(0, RoundingMode.HALF_UP).toPlainString() + "%";
 	}
 
 	private static String summary(InvestmentPlan plan) {

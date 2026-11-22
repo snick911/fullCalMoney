@@ -17,7 +17,7 @@ public class InvestmentPlan {
 		COMFORTABLE,
 		/** 需要行情較好（報酬率接近上限）才能達成 */
 		STRETCH,
-		/** 一般投資無法達成，只剩高風險投機或彩券；用於資產配置時表示行情好也達不到 */
+		/** 一般投資無法達成，只剩高風險投機或彩券 */
 		INFEASIBLE
 	}
 
@@ -56,14 +56,22 @@ public class InvestmentPlan {
 		private final boolean lowCaseOk;
 		private final BigDecimal typicalEnd;
 		private final BigDecimal maxEnd;
+		private final BigDecimal probability;
 
-		public Option(InvestmentTier tier, Fit fit, boolean horizonOk, boolean lowCaseOk, BigDecimal typicalEnd, BigDecimal maxEnd) {
+		public Option(InvestmentTier tier, Fit fit, boolean horizonOk, boolean lowCaseOk, BigDecimal typicalEnd, BigDecimal maxEnd,
+				BigDecimal probability) {
 			this.tier = tier;
 			this.fit = fit;
 			this.horizonOk = horizonOk;
 			this.lowCaseOk = lowCaseOk;
 			this.typicalEnd = typicalEnd;
 			this.maxEnd = maxEnd;
+			this.probability = probability;
+		}
+
+		/** 蒙地卡羅模擬的達成機率 ex. 0.62，沒有可預期報酬率時為 null */
+		public BigDecimal getProbability() {
+			return probability;
 		}
 
 		public InvestmentTier getTier() {
@@ -95,42 +103,77 @@ public class InvestmentPlan {
 		}
 	}
 
-	/** 一組資產配置（定存／債券／股票）的評估，報酬率依比例加權 */
+	/** 一種資產配置類型的最佳配置（定存／債券／股票）：模擬達成機率最高者 */
 	public static final class Portfolio {
 
 		private final AllocationProfile profile;
-		private final boolean custom;
 		private final int deposit;
 		private final int bond;
 		private final int stock;
 		private final BigDecimal typicalRate;
-		private final BigDecimal maxRate;
-		private final BigDecimal typicalEnd;
-		private final Fit fit;
+		private final BigDecimal volatility;
+		private final BigDecimal probability;
+		private final BigDecimal pessimistic;
+		private final BigDecimal median;
+		private final BigDecimal optimistic;
 		private final boolean horizonOk;
+		private final int candidates;
+		private final int reachable;
 
-		public Portfolio(AllocationProfile profile, boolean custom, int deposit, int bond, int stock, BigDecimal typicalRate, BigDecimal maxRate,
-				BigDecimal typicalEnd, Fit fit, boolean horizonOk) {
+		public Portfolio(AllocationProfile profile, int[] weights, BigDecimal typicalRate, BigDecimal volatility, BigDecimal probability,
+				BigDecimal[] outcomes, boolean horizonOk, int candidates, int reachable) {
 			this.profile = profile;
-			this.custom = custom;
-			this.deposit = deposit;
-			this.bond = bond;
-			this.stock = stock;
+			this.deposit = weights[0];
+			this.bond = weights[1];
+			this.stock = weights[2];
 			this.typicalRate = typicalRate;
-			this.maxRate = maxRate;
-			this.typicalEnd = typicalEnd;
-			this.fit = fit;
+			this.volatility = volatility;
+			this.probability = probability;
+			this.pessimistic = outcomes[0];
+			this.median = outcomes[1];
+			this.optimistic = outcomes[2];
 			this.horizonOk = horizonOk;
+			this.candidates = candidates;
+			this.reachable = reachable;
 		}
 
-		/** 配置類型；自訂配置為依股票比例分類的結果 */
 		public AllocationProfile getProfile() {
 			return profile;
 		}
 
-		/** 是否為使用者自訂的配置 */
-		public boolean isCustom() {
-			return custom;
+		/** 預估年波動（標準差）ex. 0.075 */
+		public BigDecimal getVolatility() {
+			return volatility;
+		}
+
+		/** 模擬的達成機率 ex. 0.62 */
+		public BigDecimal getProbability() {
+			return probability;
+		}
+
+		/** 期滿金額的第 10 百分位（悲觀） */
+		public BigDecimal getPessimistic() {
+			return pessimistic;
+		}
+
+		/** 期滿金額的中位數 */
+		public BigDecimal getMedian() {
+			return median;
+		}
+
+		/** 期滿金額的第 90 百分位（樂觀） */
+		public BigDecimal getOptimistic() {
+			return optimistic;
+		}
+
+		/** 此類型共評估幾種配置 */
+		public int getCandidates() {
+			return candidates;
+		}
+
+		/** 其中幾種達成機率超過一半 */
+		public int getReachable() {
+			return reachable;
 		}
 
 		public int getDeposit() {
@@ -145,29 +188,72 @@ public class InvestmentPlan {
 			return stock;
 		}
 
-		/** 一般行情的加權年報酬率 */
+		/** 一般行情（中位數）的加權年報酬率 */
 		public BigDecimal getTypicalRate() {
 			return typicalRate;
-		}
-
-		/** 行情好的加權年報酬率 */
-		public BigDecimal getMaxRate() {
-			return maxRate;
-		}
-
-		/** 以一般行情加權報酬率計算的期滿金額 */
-		public BigDecimal getTypicalEnd() {
-			return typicalEnd;
-		}
-
-		/** COMFORTABLE 一般行情可達成、STRETCH 需行情較好、INFEASIBLE 行情好也達不到 */
-		public Fit getFit() {
-			return fit;
 		}
 
 		/** 投資期間是否達到此類型建議的年數 */
 		public boolean isHorizonOk() {
 			return horizonOk;
+		}
+	}
+
+	/** 一種試算過的配置（每 5% 一級搜尋中的一筆） */
+	public static final class Candidate {
+
+		private final AllocationProfile profile;
+		private final int deposit;
+		private final int bond;
+		private final int stock;
+		private final double typicalRate;
+		private final double volatility;
+		private final double probability;
+		private final double median;
+
+		public Candidate(AllocationProfile profile, int[] weights, double typicalRate, double volatility, double probability, double median) {
+			this.profile = profile;
+			this.deposit = weights[0];
+			this.bond = weights[1];
+			this.stock = weights[2];
+			this.typicalRate = typicalRate;
+			this.volatility = volatility;
+			this.probability = probability;
+			this.median = median;
+		}
+
+		public AllocationProfile getProfile() {
+			return profile;
+		}
+
+		public int getDeposit() {
+			return deposit;
+		}
+
+		public int getBond() {
+			return bond;
+		}
+
+		public int getStock() {
+			return stock;
+		}
+
+		public double getTypicalRate() {
+			return typicalRate;
+		}
+
+		public double getVolatility() {
+			return volatility;
+		}
+
+		/** 模擬的達成機率 */
+		public double getProbability() {
+			return probability;
+		}
+
+		/** 期滿金額中位數 */
+		public double getMedian() {
+			return median;
 		}
 	}
 
@@ -221,6 +307,7 @@ public class InvestmentPlan {
 	private Case highCase;
 	private List<Option> options;
 	private List<Portfolio> portfolios;
+	private List<Candidate> candidates;
 	private AllocationProfile recommendedProfile;
 	private List<Row> rows;
 	private BigDecimal extendedRate;
@@ -346,7 +433,7 @@ public class InvestmentPlan {
 		this.options = options;
 	}
 
-	/** 三種參考配置（保守型、穩健型、積極型），有自訂配置時接在最後 */
+	/** 保守型、穩健型、積極型各自的最佳配置 */
 	public List<Portfolio> getPortfolios() {
 		return portfolios;
 	}
@@ -355,7 +442,16 @@ public class InvestmentPlan {
 		this.portfolios = portfolios;
 	}
 
-	/** 建議的參考配置，三種都達不到時為 null */
+	/** 所有試算過的配置，依達成機率由高到低（同機率波動低者在前） */
+	public List<Candidate> getCandidates() {
+		return candidates;
+	}
+
+	public void setCandidates(List<Candidate> candidates) {
+		this.candidates = candidates;
+	}
+
+	/** 建議的配置類型，三種都達不到時為 null */
 	public AllocationProfile getRecommendedProfile() {
 		return recommendedProfile;
 	}

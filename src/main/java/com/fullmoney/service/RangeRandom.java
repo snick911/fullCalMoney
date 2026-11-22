@@ -11,10 +11,32 @@ import java.math.RoundingMode;
  */
 public final class RangeRandom {
 
+	private static final double DOUBLE_UNIT = 1.0 / (1L << 53);
+
 	private long state;
+	private double spareGaussian;
+	private boolean hasSpareGaussian;
 
 	public RangeRandom(long seed) {
 		this.state = seed;
+	}
+
+	/** @return 0（含）到 1（不含）之間平均分布的亂數 */
+	public double nextDouble() {
+		return (nextLong() >>> 11) * DOUBLE_UNIT;
+	}
+
+	/** @return 標準常態分布（平均 0、標準差 1）的亂數，以 Box-Muller 轉換，每次產生兩個 */
+	public double nextGaussian() {
+		if (hasSpareGaussian) {
+			hasSpareGaussian = false;
+			return spareGaussian;
+		}
+		double radius = Math.sqrt(-2 * Math.log(1 - nextDouble()));
+		double angle = 2 * Math.PI * nextDouble();
+		spareGaussian = radius * Math.sin(angle);
+		hasSpareGaussian = true;
+		return radius * Math.cos(angle);
 	}
 
 	private long nextLong() {
