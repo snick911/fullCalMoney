@@ -435,27 +435,18 @@
 
     //資產配置：保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋、蒙地卡羅模擬）
     setOut(scope, 'portfolioSummary', d.portfolioSummary);
-    //比例條：定存／公債／公司債／股票，由淺到深
-    const mix = (p) => `<span class="mix"><span class="mix__bar" aria-hidden="true" data-mix="${p.weights.join(',')}">`
-      + `<i></i><i></i><i></i><i></i></span>${p.weights.join('／')}</span>`
-      + (p.stockLevelName ? `<span class="portfolio__count">股票：${escapeHtml(p.stockLevelName)}</span>` : '');
     const body = $('tbody[data-portfolio-rows]', scope);
     body.innerHTML = d.portfolios.map((p) => {
       const [chanceText, chanceClass] = CHANCES[p.chance];
       const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
       const tags = `<span class="option__tag${chanceClass}">${chanceText}</span>`
         + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">期間短於 ${escapeHtml(p.horizon)}</span>`);
-      return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${escapeHtml(p.name)}${badge}`
+      return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${profilePill(p)}${badge}`
         + `<span class="portfolio__count">${p.candidates.toLocaleString('zh-TW')} 種中約 ${p.reachable.toLocaleString('zh-TW')} 種機率過半</span></th>`
-        + `<td>${mix(p)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
+        + `<td>${allocationPie(p, 48)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
         + `<td><span class="portfolio__chance">${chancePercent(p.probability)}</span><span class="portfolio__tags">${tags}</span></td>`
         + `<td>${twd(p.median)}<span class="portfolio__count">${twd(p.pessimistic)}～${twd(p.optimistic)}</span></td></tr>`;
     }).join('');
-
-    //CSP 不允許 HTML 裡的 style 屬性，長條寬度改由 CSSOM 設定
-    $$('[data-mix]', scope).forEach((bar) => {
-      bar.dataset.mix.split(',').forEach((percent, j) => { bar.children[j].style.width = `${Number(percent)}%`; });
-    });
 
     $('[data-items="warnings"]', scope).innerHTML = d.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('');
     $('[data-items="suggestions"]', scope).innerHTML = d.suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
@@ -463,9 +454,276 @@
 
     //三種配置的逐年試算：各資產金額與獲利，旁邊對照需要的報酬率下的目標進度（d.rows 的金額）
     $('[data-allocation-years]', scope).innerHTML = d.portfolios.map((p) => allocationYears(p, d.rows, twd)).join('');
+    renderPlanCharts(d, scope);
   }
 
+  /* ---------- 投資計畫圖表：手寫 SVG（網站的 CSP 只允許同源腳本，不載入外部圖表函式庫） ---------- */
+
+  /** 座標軸用的精簡金額 ex. 2,150,000 → 215 萬、120,000,000 → 1.2 億 */
+  const compactMoney = (n) => {
+    const abs = Math.abs(n);
+    if (abs >= 1e8) return `${(n / 1e8).toFixed(abs >= 1e9 ? 0 : 1).replace(/\.0$/, '')} 億`;
+    if (abs >= 1e4) return `${Math.round(n / 1e4).toLocaleString('zh-TW')} 萬`;
+    return Math.round(n).toLocaleString('zh-TW');
+  };
+
+  /** 刻度取 1、2、5 × 10 的次方，涵蓋 min～max */
+  function niceTicks(min, max, count) {
+    const rough = (max - min || Math.abs(max) || 1) / count;
+    const power = 10 ** Math.floor(Math.log10(rough));
+    const step = [1, 2, 5, 10].map((m) => m * power).find((s) => s >= rough * (1 - 1e-9));
+    const ticks = [];
+    for (let v = Math.floor(min / step) * step; v <= max + step * 0.999; v += step) ticks.push(Math.round(v / step) * step);
+    return ticks;
+  }
+
+  /** 提示框：用 textContent 填字；位置用 CSSOM 設定（CSP 不允許 style 屬性） */
+  function chartTip(box) {
+    let tip = $('.chart__tip', box);
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.className = 'chart__tip';
+      tip.hidden = true;
+      box.appendChild(tip);
+    }
+    return {
+      show(title, rows, x, y) {
+        tip.replaceChildren();
+        const head = document.createElement('div');
+        head.className = 'chart__tip-title';
+        head.textContent = title;
+        tip.appendChild(head);
+        rows.forEach(({ value, label, key }) => {
+          const row = document.createElement('div');
+          row.className = 'chart__tip-row';
+          const line = document.createElement('i');
+          line.className = key;
+          const strong = document.createElement('b');
+          strong.textContent = value;
+          const name = document.createElement('span');
+          name.textContent = label;
+          row.append(line, strong, name);
+          tip.appendChild(row);
+        });
+        tip.hidden = false;
+        const left = x + 14 + tip.offsetWidth > box.clientWidth ? x - 14 - tip.offsetWidth : x + 14;
+        tip.style.left = `${Math.max(0, left)}px`;
+        tip.style.top = `${Math.max(0, y)}px`;
+      },
+      hide() { tip.hidden = true; },
+    };
+  }
+
+  /** 端點標籤互相太近時往下推開，並記錄原位置以畫連接線 */
+  function spreadLabels(labels, minGap, bottom) {
+    labels.sort((a, b) => a.y - b.y);
+    labels.forEach((label, i) => {
+      label.labelY = i > 0 ? Math.max(label.y, labels[i - 1].labelY + minGap) : label.y;
+    });
+    const overflow = labels.length ? labels[labels.length - 1].labelY - bottom : 0;
+    if (overflow > 0) labels.forEach((label) => { label.labelY -= overflow; });
+    return labels;
+  }
+
+  /**
+   * 累積財富走勢：三型最佳配置的總金額（一般行情）逐年折線，加上目標進度虛線與累積投入淡色面積；
+   * 線尾直接標示類型名稱，滑鼠或手指移動時縱線對齊最近的年度並列出每條線的金額
+   */
+  function growthChart(box, d) {
+    const width = Math.max(box.clientWidth, 280);
+    const height = width < 480 ? 240 : 290;
+    const m = { top: 14, right: width < 480 ? 64 : 84, bottom: 28, left: width < 480 ? 46 : 58 };
+    const plotW = width - m.left - m.right;
+    const plotH = height - m.top - m.bottom;
+    const principal = Math.max(0, d.invested - d.monthly * d.months);
+    const months = [0, ...d.rows.map((r) => r[0])];
+    const target = [principal, ...d.rows.map((r) => r[2])];
+    const invested = [principal, ...d.rows.map((r) => r[1])];
+    const series = d.portfolios.map((p) => ({ code: p.code, name: p.name, values: [principal, ...p.rows.map((r) => r[10])] }));
+    const top = Math.max(...target, ...series.flatMap((s) => s.values)) * 1.04;
+    const yTicks = niceTicks(0, top, width < 480 ? 4 : 5);
+    const yMax = yTicks[yTicks.length - 1];
+    const x = (month) => m.left + (month / d.months) * plotW;
+    const y = (v) => m.top + plotH - (v / yMax) * plotH;
+    const points = (values) => values.map((v, i) => `${x(months[i]).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+
+    //年度刻度：最多約 8 個
+    const years = d.months / 12;
+    const yearStep = [1, 2, 5, 10, 20, 25, 50].find((s) => years / s <= (width < 480 ? 5 : 8)) || 50;
+    const xTicks = years >= 1 ? Array.from({ length: Math.floor(years / yearStep) + 1 }, (_, i) => i * yearStep * 12) : [0, d.months];
+    const xLabel = (month) => (years >= 1 ? `${month / 12} 年` : `${month} 個月`);
+
+    const grid = yTicks.map((v) => `<line class="chart__grid" x1="${m.left}" x2="${m.left + plotW}" y1="${y(v)}" y2="${y(v)}"></line>`
+      + `<text x="${m.left - 6}" y="${y(v) + 4}" text-anchor="end">${compactMoney(v)}</text>`).join('');
+    const axis = `<line class="chart__axis" x1="${m.left}" x2="${m.left + plotW}" y1="${y(0)}" y2="${y(0)}"></line>`
+      + xTicks.map((t) => `<text x="${x(t)}" y="${height - 8}" text-anchor="middle">${xLabel(t)}</text>`).join('');
+    const area = `<polygon class="chart__invested" points="${x(0)},${y(0)} ${points(invested)} ${x(d.months)},${y(0)}"></polygon>`;
+    const lines = series.map((s) => `<polyline class="chart__line profile--${s.code}" points="${points(s.values)}"></polyline>`).join('')
+      + `<polyline class="chart__target" points="${points(target)}"></polyline>`;
+
+    //線尾標籤：類型名稱用文字色，旁邊的圓點才是類型色
+    const last = months.length - 1;
+    const ends = spreadLabels([
+      ...series.map((s) => ({ y: y(s.values[last]), text: s.name, code: s.code })),
+      { y: y(target[last]), text: '目標', code: null },
+    ], 15, m.top + plotH);
+    const endX = x(d.months);
+    const endLabels = ends.map((e) => (e.code
+      ? `<circle class="chart__dot profile--${e.code}" cx="${endX}" cy="${e.y}" r="4"></circle>` : '')
+      + (Math.abs(e.labelY - e.y) > 1 ? `<line class="chart__leader" x1="${endX + 5}" y1="${e.y}" x2="${endX + 10}" y2="${e.labelY}"></line>` : '')
+      + `<text class="chart__label" x="${endX + 12}" y="${e.labelY + 4}">${e.text}</text>`).join('');
+
+    box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="累積財富走勢圖，數值見下方逐年試算表">`
+      + `${grid}${area}${axis}${lines}${endLabels}`
+      + `<line class="chart__cross" data-cross x1="0" x2="0" y1="${m.top}" y2="${m.top + plotH}" visibility="hidden"></line>`
+      + series.map((s) => `<circle class="chart__dot profile--${s.code}" data-hover="${s.code}" r="4" visibility="hidden"></circle>`).join('')
+      + `<rect class="chart__hit" x="${m.left}" y="${m.top}" width="${plotW}" height="${plotH}"></rect></svg>`;
+
+    //十字線：對齊最近的年度，一個提示框列出所有線的金額
+    const svg = $('svg', box);
+    const cross = $('[data-cross]', svg);
+    const tip = chartTip(box);
+    const twd = (n) => fmt.twd(n, d.decimals);
+    const moveTo = (event) => {
+      const rect = svg.getBoundingClientRect();
+      const px = (event.clientX - rect.left) * (width / rect.width);
+      let index = 0;
+      months.forEach((month, i) => { if (Math.abs(x(month) - px) < Math.abs(x(months[index]) - px)) index = i; });
+      const cx = x(months[index]);
+      cross.setAttribute('x1', cx);
+      cross.setAttribute('x2', cx);
+      cross.setAttribute('visibility', 'visible');
+      series.forEach((s) => {
+        const dot = $(`[data-hover="${s.code}"]`, svg);
+        dot.setAttribute('cx', cx);
+        dot.setAttribute('cy', y(s.values[index]));
+        dot.setAttribute('visibility', 'visible');
+      });
+      const rows = [...series.map((s) => ({ value: twd(s.values[index]), label: s.name, key: `legend-line profile--${s.code}` })),
+        { value: twd(target[index]), label: '目標進度', key: 'legend-line legend-line--target' },
+        { value: twd(invested[index]), label: '累積投入', key: 'legend-area' }]
+        .sort((a, b) => parseNumber(b.value.replace('$', '')) - parseNumber(a.value.replace('$', '')));
+      tip.show(index === 0 ? '開始' : fmt.term(months[index]), rows, cx * (rect.width / width), m.top);
+    };
+    const hide = () => {
+      cross.setAttribute('visibility', 'hidden');
+      $$('[data-hover]', svg).forEach((dot) => dot.setAttribute('visibility', 'hidden'));
+      tip.hide();
+    };
+    const hit = $('.chart__hit', svg);
+    hit.addEventListener('pointermove', moveTo);
+    hit.addEventListener('pointerdown', moveTo);
+    hit.addEventListener('pointerleave', hide);
+  }
+
+  /**
+   * 期滿金額區間：每型一列，線段為悲觀（第 10 百分位）到樂觀（第 90 百分位），圓點為中位數，
+   * 虛線為目標金額；滑過一列顯示三個金額與達成機率
+   */
+  function rangeChart(box, d) {
+    const width = Math.max(box.clientWidth, 280);
+    const narrow = width < 480;
+    const rowH = 48;
+    const m = { top: 24, right: 18, bottom: 26, left: narrow ? 58 : 70 };
+    const height = m.top + rowH * d.portfolios.length + m.bottom;
+    const plotW = width - m.left - m.right;
+    const values = d.portfolios.flatMap((p) => [p.pessimistic, p.optimistic]).concat(d.target);
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    const pad = (high - low) * 0.06 || high * 0.05 || 1;
+    const ticks = niceTicks(Math.max(0, low - pad), high + pad, narrow ? 3 : 5);
+    const min = ticks[0];
+    const max = ticks[ticks.length - 1];
+    const x = (v) => m.left + ((v - min) / (max - min)) * plotW;
+    const twd = (n) => fmt.twd(n, d.decimals);
+
+    const grid = ticks.map((v) => `<line class="chart__grid" x1="${x(v)}" x2="${x(v)}" y1="${m.top}" y2="${height - m.bottom}"></line>`
+      + `<text x="${x(v)}" y="${height - 8}" text-anchor="middle">${compactMoney(v)}</text>`).join('');
+    const rows = d.portfolios.map((p, i) => {
+      const cy = m.top + rowH * i + rowH / 2;
+      return `<g class="profile--${p.code}">`
+        + `<rect class="chart__row-hit" data-row="${i}" x="0" y="${cy - rowH / 2}" width="${width}" height="${rowH}"></rect>`
+        + `<circle class="chart__dot" cx="10" cy="${cy}" r="4"></circle>`
+        + `<text class="chart__label" x="20" y="${cy + 4}">${escapeHtml(p.name)}</text>`
+        + `<line class="chart__range" x1="${x(p.pessimistic)}" x2="${x(p.optimistic)}" y1="${cy}" y2="${cy}"></line>`
+        + `<circle class="chart__median" cx="${x(p.median)}" cy="${cy}" r="6"></circle>`
+        + `<text class="chart__value" x="${x(p.median)}" y="${cy - 11}" text-anchor="middle">${compactMoney(p.median)}</text>`
+        + '</g>';
+    }).join('');
+    const targetX = x(d.target);
+    const target = `<line class="chart__target" x1="${targetX}" x2="${targetX}" y1="${m.top - 4}" y2="${height - m.bottom}"></line>`
+      + `<text class="chart__value" x="${Math.min(Math.max(targetX, m.left + 30), width - 30)}" y="${m.top - 9}" text-anchor="middle">目標 ${compactMoney(d.target)}</text>`;
+
+    box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="期滿金額區間圖，數值見資產配置表">`
+      + `${grid}${target}${rows}</svg>`;
+
+    const svg = $('svg', box);
+    const tip = chartTip(box);
+    $$('[data-row]', svg).forEach((hit) => {
+      const p = d.portfolios[Number(hit.dataset.row)];
+      const show = () => {
+        const rect = svg.getBoundingClientRect();
+        const scale = rect.width / width;
+        const key = `legend-line profile--${p.code}`;
+        tip.show(`${p.name}・達成機率 ${chancePercent(p.probability)}`, [
+          { value: twd(p.optimistic), label: '樂觀（最好 10%）', key },
+          { value: twd(p.median), label: '中位數', key },
+          { value: twd(p.pessimistic), label: '悲觀（最差 10%）', key },
+          { value: twd(d.target), label: '目標', key: 'legend-line legend-line--target' },
+        ], x(p.optimistic) * scale, (m.top + rowH * Number(hit.dataset.row)) * scale);
+      };
+      hit.addEventListener('pointerenter', show);
+      hit.addEventListener('pointerdown', show);
+      hit.addEventListener('pointerleave', () => tip.hide());
+    });
+  }
+
+  /** 圖例與兩張圖；視窗大小改變時用最後一次的結果重畫 */
+  let lastPlan = null;
+  function renderPlanCharts(d, scope) {
+    lastPlan = { d, scope };
+    $('[data-growth-legend]', scope).innerHTML = d.portfolios.map((p) =>
+      `<span class="profile--${escapeHtml(p.code)}"><i class="legend-line"></i>${escapeHtml(p.name)}</span>`).join('')
+      + '<span><i class="legend-line legend-line--target"></i>目標進度</span><span><i class="legend-area"></i>累積投入</span>';
+    growthChart($('[data-growth-chart]', scope), d);
+    rangeChart($('[data-range-chart]', scope), d);
+  }
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (lastPlan && !lastPlan.scope.hidden) renderPlanCharts(lastPlan.d, lastPlan.scope);
+    }, DEBOUNCE_MS);
+  });
+
   const ASSET_NAMES = ['定存', '公債', '公司債', '股票'];
+
+  /** 配置類型標籤：圓點與邊框是類型色，文字是一般文字色 */
+  const profilePill = (p) => `<span class="profile-pill profile--${escapeHtml(p.code)}">${escapeHtml(p.name)}</span>`;
+
+  /** 資產名稱，股票附上等級 ex. 股票（穩健型股票） */
+  const assetLabel = (p, i) => (i === 3 && p.stockLevelName ? `股票（${escapeHtml(p.stockLevelName)}）` : ASSET_NAMES[i]);
+
+  /**
+   * 資產配置的甜甜圈圖：圓周長設為 100，比例直接當線段長度；每段之間留約 2px 間隔，從 12 點鐘方向順時針排列。
+   * 旁邊列出各資產的名稱與比例（顏色不單獨表達意義），滑過每段顯示名稱與比例
+   */
+  function allocationPie(p, size) {
+    const radius = 15.9155;
+    const parts = p.weights.map((w, i) => ({ w, i })).filter((part) => part.w > 0);
+    const gap = parts.length > 1 ? 1.6 : 0;
+    let start = 0;
+    const segments = parts.map(({ w, i }) => {
+      const offset = (125 - start) % 100;
+      start += w;
+      return `<circle class="asset-${i + 1}" cx="21" cy="21" r="${radius}" stroke-dasharray="${Math.max(w - gap, 0.1)} ${100 - Math.max(w - gap, 0.1)}"`
+        + ` stroke-dashoffset="${offset}"><title>${assetLabel(p, i)} ${w}%</title></circle>`;
+    }).join('');
+    const label = parts.map(({ w, i }) => `${ASSET_NAMES[i]} ${w}%`).join('、');
+    const legend = parts.map(({ w, i }) => `<li><i class="swatch-dot asset-${i + 1}"></i>${assetLabel(p, i)} ${w}%</li>`).join('');
+    return `<span class="allocation-pie"><svg class="donut" viewBox="0 0 42 42" width="${size}" height="${size}" role="img" aria-label="${label}">`
+      + `<circle class="donut__track" cx="21" cy="21" r="${radius}"></circle>${segments}</svg><ul class="parts">${legend}</ul></span>`;
+  }
 
   /**
    * 一種配置的逐年試算表；p.rows 每列為 [月, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的獲利（4 欄）, 總金額, 累積獲利]
@@ -482,15 +740,16 @@
         + `<td class="${ahead ? 'is-accent' : 'is-down'}">${twd(total)}</td><td>${twd(r[3 + count * 2])}</td>`
         + `<td>${target == null ? NO_VALUE : twd(target)}</td></tr>`;
     }).join('');
-    const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
-    const weights = ASSET_NAMES.map((name, i) => `${name} ${p.weights[i]}%`).join('・');
-    const stockHead = p.stockLevelName ? `股票<span class="asset-gain">${escapeHtml(p.stockLevelName)}</span>` : '股票';
-    return '<div class="card card--flush">'
-      + `<div class="card__head"><h2>${escapeHtml(p.name)} 逐年試算${badge}</h2>`
-      + `<span class="card__meta">${weights}｜達成機率 ${chancePercent(p.probability)}</span></div>`
+    const badge = p.recommended ? '<span class="option__tag">建議</span>' : '';
+    //欄位標題前加上與圓餅相同顏色的小方塊
+    const head = (i) => `<th scope="col"><span class="asset-head"><i class="swatch-dot asset-${i + 1}"></i>${ASSET_NAMES[i]}</span>`
+      + (i === 3 && p.stockLevelName ? `<span class="asset-gain">${escapeHtml(p.stockLevelName)}</span>` : '') + '</th>';
+    return `<div class="card card--flush profile-card profile--${escapeHtml(p.code)}">`
+      + `<div class="card__head"><h2>${profilePill(p)} 逐年試算${badge}</h2>`
+      + `<span class="profile-card__summary">${allocationPie(p, 56)}<span class="card__meta">達成機率 ${chancePercent(p.probability)}</span></span></div>`
       + `<div class="table-wrap" tabindex="0" aria-label="${escapeHtml(p.name)}逐年試算，可捲動"><table class="data-table">`
-      + '<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th><th scope="col">定存</th><th scope="col">公債</th><th scope="col">公司債</th>'
-      + `<th scope="col">${stockHead}</th><th scope="col">總金額</th><th scope="col">累積獲利</th><th scope="col">目標進度</th></tr></thead>`
+      + `<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th>${ASSET_NAMES.map((name, i) => head(i)).join('')}`
+      + '<th scope="col">總金額</th><th scope="col">累積獲利</th><th scope="col">目標進度</th></tr></thead>'
       + `<tbody>${body}</tbody></table></div></div>`;
   }
 

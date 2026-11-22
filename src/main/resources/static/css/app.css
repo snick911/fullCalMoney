@@ -57,6 +57,20 @@
   --shadow-lg: 0 12px 32px rgb(58 29 39 / .18);
 }
 
+/*
+ * 圖表配色（已用配色驗證工具檢查，淺色與深色主題各一組）：
+ * 資產（定存／公債／公司債／股票）用類別色，圓餅相鄰兩色在色盲模擬下仍可分辨；
+ * 三種配置類型用另外三色，只當標記（圓點、邊框），文字一律用一般文字色
+ */
+:root {
+  --asset-1: #2a78d6; --asset-2: #eb6834; --asset-3: #1baf7a; --asset-4: #eda100;
+  --profile-CONSERVATIVE: #008300; --profile-BALANCED: #6250d6; --profile-AGGRESSIVE: #e34948;
+}
+[data-theme="dark"], [data-theme="eye-dark"] {
+  --asset-1: #3987e5; --asset-2: #d95926; --asset-3: #199e70; --asset-4: #c98500;
+  --profile-CONSERVATIVE: #0ca30c; --profile-BALANCED: #9085e9; --profile-AGGRESSIVE: #e66767;
+}
+
 :root {
   --accent-soft: color-mix(in srgb, var(--accent) 11%, var(--surface));
   --hover: color-mix(in srgb, var(--accent) 10%, transparent);
@@ -551,19 +565,88 @@ select.input option { background: var(--surface); color: var(--fg); }
 .portfolio__count { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
 .portfolio__chance { display: block; color: var(--accent); font-weight: 700; }
 
-/* 三種配置的逐年試算 */
+/* 三種配置的逐年試算：卡片上緣與類型標籤用該類型的顏色 */
 .allocation-years { display: flex; flex-direction: column; gap: 1rem; }
-.allocation-years .card__head h2 { display: flex; align-items: center; gap: .5rem; }
-.asset-gain { display: block; color: var(--muted); font-size: .75rem; }
+.allocation-years .card__head { align-items: flex-start; }
+.allocation-years .card__head h2 { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.profile-card { border-top: 4px solid var(--profile-color, var(--border)); }
+.profile-card__summary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.asset-gain { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
+.asset-head { display: inline-flex; align-items: center; gap: .3rem; }
+
+/* 配置類型標籤：圓點與淡底色是類型色，文字維持一般文字色 */
+.profile--CONSERVATIVE { --profile-color: var(--profile-CONSERVATIVE); }
+.profile--BALANCED { --profile-color: var(--profile-BALANCED); }
+.profile--AGGRESSIVE { --profile-color: var(--profile-AGGRESSIVE); }
+.profile-pill {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .15rem .65rem .15rem .5rem; border-radius: 999px;
+  border: 1px solid var(--profile-color); background: color-mix(in srgb, var(--profile-color) 14%, var(--surface));
+  color: var(--fg); font-weight: 700; white-space: nowrap;
+}
+.profile-pill::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%; background: var(--profile-color); }
+
+/*
+ * 投資計畫圖表（手寫 SVG）：線 2px、端點 r4 加 2px 底色外圈、格線 1px 實線、面積 10% 淡色；
+ * 文字一律用文字色，顏色只用在線、點、色塊
+ */
+.chart-card { padding-bottom: .9rem; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+.chart .chart__label { fill: var(--fg); font-size: 12px; font-weight: 700; }
+.chart .chart__value { fill: var(--fg); font-size: 11px; font-weight: 700; }
+/* 文字壓到線時，以底色描邊保持清楚 */
+.chart .chart__label, .chart .chart__value { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.chart .chart__grid { stroke: var(--grid-line); stroke-width: 1; }
+.chart .chart__axis { stroke: var(--border); stroke-width: 1; }
+.chart .chart__line { fill: none; stroke: var(--profile-color); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .chart__target { fill: none; stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .65; }
+.chart .chart__invested { fill: var(--muted); opacity: .12; }
+.chart .chart__dot { fill: var(--profile-color); stroke: var(--surface); stroke-width: 2; }
+.chart .chart__leader { stroke: var(--muted); stroke-width: 1; }
+.chart .chart__cross { stroke: var(--muted); stroke-width: 1; }
+.chart .chart__range { stroke: var(--profile-color); stroke-width: 12; stroke-linecap: round; stroke-opacity: .32; }
+.chart .chart__median { fill: var(--profile-color); stroke: var(--surface); stroke-width: 2; }
+.chart .chart__hit { fill: transparent; cursor: crosshair; }
+.chart .chart__row-hit { fill: transparent; }
+.chart .chart__row-hit:hover { fill: var(--hover); }
+.chart__tip {
+  position: absolute; z-index: 3; pointer-events: none; min-width: 9rem;
+  padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface); box-shadow: var(--shadow-lg); font-size: .8125rem; line-height: 1.45;
+}
+.chart__tip-title { color: var(--muted); font-weight: 700; margin-bottom: .15rem; }
+.chart__tip-row { display: flex; align-items: center; gap: .45rem; white-space: nowrap; }
+.chart__tip-row b { font-variant-numeric: tabular-nums; }
+.chart__tip-row span { color: var(--muted); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: .3rem 1.1rem; margin: 0 0 .55rem; color: var(--muted); font-size: .8125rem; }
+.chart-legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.legend-line { display: inline-block; flex: none; width: 1.2rem; border-top: 2px solid var(--profile-color); }
+.legend-line--target { border-top: 2px dashed var(--fg); opacity: .65; }
+.legend-area { display: inline-block; flex: none; width: .9rem; height: .65rem; border-radius: 2px; background: color-mix(in srgb, var(--muted) 25%, transparent); }
+.legend-range { display: inline-block; flex: none; width: 1.4rem; height: .55rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.legend-median { display: inline-block; flex: none; width: .6rem; height: .6rem; border-radius: 50%; background: var(--muted); }
+
+/* 資產配置圓餅（甜甜圈）：每段之間留 2px 底色間隔，旁邊列出名稱與比例 */
+.allocation-pie { display: inline-flex; align-items: center; gap: .6rem; }
+.donut { flex: none; }
+.donut circle { fill: none; stroke-width: 7; }
+.donut .donut__track { stroke: var(--stripe); }
+.donut .asset-1 { stroke: var(--asset-1); }
+.donut .asset-2 { stroke: var(--asset-2); }
+.donut .asset-3 { stroke: var(--asset-3); }
+.donut .asset-4 { stroke: var(--asset-4); }
+.parts { list-style: none; margin: 0; padding: 0; font-size: .8125rem; line-height: 1.5; text-align: left; }
+.parts li { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.swatch-dot { flex: none; width: .65rem; height: .65rem; border-radius: 2px; }
+.swatch-dot.asset-1 { background: var(--asset-1); }
+.swatch-dot.asset-2 { background: var(--asset-2); }
+.swatch-dot.asset-3 { background: var(--asset-3); }
+.swatch-dot.asset-4 { background: var(--asset-4); }
 .portfolio__tags { display: block; margin-top: .15rem; }
 .option__probability { margin-top: .3rem; padding-top: .3rem; border-top: 1px dashed var(--border); font-weight: 700; }
 .option__probability span:nth-child(2) { color: var(--accent); }
-.mix { display: inline-flex; align-items: center; gap: .5rem; }
-.mix__bar { display: flex; width: 4.5rem; height: .55rem; border-radius: 999px; overflow: hidden; background: var(--stripe); }
-.mix__bar i:nth-child(1) { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
-.mix__bar i:nth-child(2) { background: color-mix(in srgb, var(--accent) 42%, var(--surface)); }
-.mix__bar i:nth-child(3) { background: color-mix(in srgb, var(--accent) 68%, var(--surface)); }
-.mix__bar i:nth-child(4) { background: var(--accent); }
 .data-table tbody tr.is-recommended > * { background: var(--accent-soft); }
 .data-table .option__tag + .option__tag { margin-left: .25rem; }
 
