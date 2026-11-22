@@ -123,14 +123,10 @@ public class InvestmentPlanner {
 		BigDecimal lowRate = plan.getLowCase() == null ? null : plan.getLowCase().getRate();
 		plan.setOptions(options(tier, p, m, months, rate, profit, plan.getLowCase() != null, lowRate, target, simulator));
 		List<InvestmentPlan.Portfolio> portfolios = new ArrayList<>();
-		List<InvestmentPlan.Candidate> candidates = new ArrayList<>();
 		for (AllocationProfile profile : AllocationProfile.values()) {
-			portfolios.add(bestPortfolio(profile, p, m, months, target.doubleValue(), simulator, candidates));
+			portfolios.add(bestPortfolio(profile, p, m, months, target.doubleValue(), simulator));
 		}
-		candidates.sort((a, b) -> a.getProbability() != b.getProbability() ? Double.compare(b.getProbability(), a.getProbability())
-				: Double.compare(a.getVolatility(), b.getVolatility()));
 		plan.setPortfolios(portfolios);
-		plan.setCandidates(candidates);
 		plan.setRecommendedProfile(recommend(portfolios));
 		plan.setRows(rows(principal, monthly, target, months, rate));
 
@@ -261,7 +257,7 @@ public class InvestmentPlanner {
 	 * 500 次模擬的誤差約 ±2 個百分點，不值得為了更小的差距多承擔風險。機率都是 0 時取一般行情報酬最高、最接近目標者
 	 */
 	private static InvestmentPlan.Portfolio bestPortfolio(AllocationProfile profile, double principal, double monthly, int months, double target,
-			MarketSimulator simulator, List<InvestmentPlan.Candidate> all) {
+			MarketSimulator simulator) {
 		List<int[]> weightsList = new ArrayList<>();
 		List<double[]> finalsList = new ArrayList<>();
 		List<InvestmentPlan.Candidate> evaluated = new ArrayList<>();
@@ -289,8 +285,6 @@ public class InvestmentPlanner {
 				}
 			}
 		}
-		all.addAll(evaluated);
-
 		int chosen = -1;
 		for (int i = 0; i < evaluated.size(); i++) {
 			InvestmentPlan.Candidate candidate = evaluated.get(i);
@@ -310,7 +304,33 @@ public class InvestmentPlanner {
 		boolean horizonOk = months >= profile.getMinYears() * MONTHS_PER_YEAR;
 		int[] weights = weightsList.get(chosen);
 		return new InvestmentPlan.Portfolio(profile, weights, weighted(weights), decimal(best.getVolatility()).setScale(VOLATILITY_SCALE, RoundingMode.HALF_UP),
-				probability(best.getProbability()), outcomes, horizonOk, evaluated.size(), reachable);
+				probability(best.getProbability()), outcomes, horizonOk, evaluated.size(), reachable, allocationRows(weights, principal, monthly, months));
+	}
+
+	/**
+	 * 逐年試算：本金與每月投資依配置比例分到定存、債券、股票，之後各自以一般行情報酬率逐月複利（不做再平衡）；
+	 * 每滿一年一列，最後不足一年的月份另列
+	 */
+	private static List<InvestmentPlan.AllocationRow> allocationRows(int[] weights, double principal, double monthly, int months) {
+		List<InvestmentPlan.AllocationRow> rows = new ArrayList<>();
+		for (int m = MONTHS_PER_YEAR; m <= months; m += MONTHS_PER_YEAR) {
+			rows.add(allocationRow(weights, principal, monthly, m));
+		}
+		if (months % MONTHS_PER_YEAR != 0) {
+			rows.add(allocationRow(weights, principal, monthly, months));
+		}
+		return rows;
+	}
+
+	private static InvestmentPlan.AllocationRow allocationRow(int[] weights, double principal, double monthly, int months) {
+		BigDecimal[] invested = new BigDecimal[ASSETS.length];
+		BigDecimal[] values = new BigDecimal[ASSETS.length];
+		for (int i = 0; i < ASSETS.length; i++) {
+			double share = weights[i] / 100.0;
+			invested[i] = decimal((principal + monthly * months) * share);
+			values[i] = decimal(futureValue(principal * share, monthly * share, ASSETS[i].getTypicalRate().doubleValue(), months));
+		}
+		return new InvestmentPlan.AllocationRow(months, invested, values);
 	}
 
 	/** 有機會達成時比波動低（再比報酬高）；機率都是 0 時比報酬高 */

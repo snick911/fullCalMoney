@@ -478,6 +478,7 @@ select.input option { background: var(--surface); color: var(--fg); }
 .data-table tbody tr:last-child > * { border-bottom: 0; }
 .data-table .is-accent { color: var(--accent); font-weight: 700; }
 .data-table .is-down { color: var(--danger); }
+.data-table .is-muted { color: var(--muted); }
 .data-table .empty { text-align: center; color: var(--muted); padding: 1.5rem; }
 .data-table--summary tr > :first-child { text-align: left; }
 .data-table--summary tbody th { background: var(--surface); color: var(--fg); font-weight: 700; }
@@ -549,9 +550,12 @@ select.input option { background: var(--surface); color: var(--fg); }
 .portfolio__rule { margin: .45rem 0 0; color: var(--muted); font-size: .8125rem; }
 .portfolio__count { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
 .portfolio__chance { display: block; color: var(--accent); font-weight: 700; }
+
+/* 三種配置的逐年試算 */
+.allocation-years { display: flex; flex-direction: column; gap: 1rem; }
+.allocation-years .card__head h2 { display: flex; align-items: center; gap: .5rem; }
+.asset-gain { display: block; color: var(--muted); font-size: .75rem; }
 .portfolio__tags { display: block; margin-top: .15rem; }
-.candidates { margin-top: .75rem; }
-.candidates .table-wrap { max-height: 24rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .option__probability { margin-top: .3rem; padding-top: .3rem; border-top: 1px dashed var(--border); font-weight: 700; }
 .option__probability span:nth-child(2) { color: var(--accent); }
 .mix { display: inline-flex; align-items: center; gap: .5rem; }

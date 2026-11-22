@@ -574,18 +574,6 @@
               <tbody data-portfolio-rows></tbody>
             </table>
           </div>
-          <details class="sublist candidates">
-            <summary><span>查看全部試算結果</span><span class="badge" data-out="candidateCount"></span></summary>
-            <div class="sublist__body">
-              <p class="sublist__desc">依達成機率由高到低排序；標示「最佳」的是各類型挑中的配置（機率與最高者相差不到 2 個百分點時取波動較低的）。</p>
-              <div class="table-wrap" tabindex="0" aria-label="全部試算結果，可捲動">
-                <table class="data-table">
-                  <thead><tr><th scope="col">排名</th><th scope="col">類型</th><th scope="col">定存／債券／股票</th><th scope="col">一般行情</th><th scope="col">預估波動</th><th scope="col">達成機率</th><th scope="col">期滿中位數</th></tr></thead>
-                  <tbody data-candidate-rows></tbody>
-                </table>
-              </div>
-            </div>
-          </details>
           <p class="portfolio__rule">定存、債券、股票以每 5% 一級列出所有組合，依股票比例分類（25% 以下保守型、30%～45% 穩健型、50% 以上積極型），定存上限為保守型 50%、穩健型 30%、積極型 20%。每種配置以蒙地卡羅模擬 500 種市場走勢（每年報酬為對數常態分布，中位數為一般行情報酬率），計算期滿金額達到目標的機率；每一型挑出機率最高的配置，相差不到 2 個百分點時取波動較低的。報酬率依比例加權（定存 1.5%、債券 3.5%、股票 7%）；預估波動假設定存 0%、債券 5%、股票 18%、股債相關係數 0.2。長條由淺到深為定存、債券、股票。</p>
         </section>
         <ul class="advice__list advice__list--warn" data-items="warnings"></ul>
@@ -595,18 +583,8 @@
         </div>
       </article>
 
-      <div class="card card--flush">
-        <div class="card__head">
-          <h2>逐年試算</h2>
-          <span class="card__meta" data-out="rowsCaption"></span>
-        </div>
-        <div class="table-wrap" tabindex="0" aria-label="逐年試算，可捲動">
-          <table class="data-table">
-            <thead><tr><th scope="col">期間</th><th scope="col">累積投入</th><th scope="col">金額</th><th scope="col">累積獲利</th><th scope="col">累積報酬率</th></tr></thead>
-            <tbody data-rows></tbody>
-          </table>
-        </div>
-      </div>
+      <div class="allocation-years" data-allocation-years></div>
+      <p class="note">逐年試算：本金與每月投資依配置比例分到定存、債券、股票，之後各自以一般行情報酬率（定存 1.5%、債券 3.5%、股票 7%）逐月複利，不做再平衡；「目標進度」是以需要的年化報酬率計算、剛好在期滿達標的金額。實際報酬每年會上下波動，請同時參考達成機率。</p>
       <p class="note">本金在第 1 個月初投入，每月投資在每月月初投入；需要的年化報酬率是讓期滿金額剛好等於「總投入 + 期望獲利」的報酬率（逐月複利）。各類標的的「一般行情」與「行情好」報酬率都是假設值，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
     </div>
   </section>

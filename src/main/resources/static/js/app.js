@@ -450,13 +450,6 @@
         + `<td>${twd(p.median)}<span class="portfolio__count">${twd(p.pessimistic)}～${twd(p.optimistic)}</span></td></tr>`;
     }).join('');
 
-    //全部試算結果：[類型代碼, 類型, 定存, 債券, 股票, 一般行情, 波動, 機率, 中位數, 是否為最佳]
-    setOut(scope, 'candidateCount', `${d.candidates.length} 種`);
-    $('tbody[data-candidate-rows]', scope).innerHTML = d.candidates.map((c, i) =>
-      `<tr${c[9] ? ' class="is-recommended"' : ''}><td>${i + 1}</td><td>${escapeHtml(c[1])}${c[9] ? ' <span class="option__tag">最佳</span>' : ''}</td>`
-      + `<td>${mix(c[2], c[3], c[4])}</td><td>${fmt.percentFixed(c[5])}</td><td>${fmt.percentFixed(c[6])}</td>`
-      + `<td>${chancePercent(c[7])}</td><td>${twd(c[8])}</td></tr>`).join('');
-
     //CSP 不允許 HTML 裡的 style 屬性，長條寬度改由 CSSOM 設定
     $$('[data-mix]', scope).forEach((bar) => {
       bar.dataset.mix.split(',').forEach((percent, j) => { bar.children[j].style.width = `${Number(percent)}%`; });
@@ -466,9 +459,29 @@
     $('[data-items="suggestions"]', scope).innerHTML = d.suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
     $('[data-suggestions]', scope).hidden = d.suggestions.length === 0;
 
-    setOut(scope, 'rowsCaption', `以年化 ${planRate(d.requiredRate)} 計算，共 ${fmt.term(d.months)}`);
-    $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
-      `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td><td>${twd(r[2])}</td><td>${twd(r[3])}</td><td>${planRate(r[4])}</td></tr>`).join('');
+    //三種配置的逐年試算：各資產金額與獲利，旁邊對照需要的報酬率下的目標進度（d.rows 的金額）
+    $('[data-allocation-years]', scope).innerHTML = d.portfolios.map((p) => allocationYears(p, d.rows, twd)).join('');
+  }
+
+  /** 一種配置的逐年試算表；p.rows 每列為 [月, 累積投入, 定存, 債券, 股票, 定存獲利, 債券獲利, 股票獲利, 總金額, 累積獲利] */
+  function allocationYears(p, targetRows, twd) {
+    const weights = [p.deposit, p.bond, p.stock];
+    const asset = (r, i) => (weights[i] === 0 ? `<td class="is-muted">${NO_VALUE}</td>`
+      : `<td>${twd(r[2 + i])}<span class="asset-gain">獲利 ${twd(r[5 + i])}</span></td>`);
+    const body = p.rows.map((r, i) => {
+      const target = targetRows[i] ? targetRows[i][2] : null;
+      const ahead = target == null || r[8] >= target;
+      return `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td>${asset(r, 0)}${asset(r, 1)}${asset(r, 2)}`
+        + `<td class="${ahead ? 'is-accent' : 'is-down'}">${twd(r[8])}</td><td>${twd(r[9])}</td><td>${target == null ? NO_VALUE : twd(target)}</td></tr>`;
+    }).join('');
+    const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
+    return '<div class="card card--flush">'
+      + `<div class="card__head"><h2>${escapeHtml(p.name)} 逐年試算${badge}</h2>`
+      + `<span class="card__meta">定存 ${p.deposit}%・債券 ${p.bond}%・股票 ${p.stock}%｜達成機率 ${chancePercent(p.probability)}</span></div>`
+      + `<div class="table-wrap" tabindex="0" aria-label="${escapeHtml(p.name)}逐年試算，可捲動"><table class="data-table">`
+      + '<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th><th scope="col">定存</th><th scope="col">債券</th><th scope="col">股票</th>'
+      + '<th scope="col">總金額</th><th scope="col">累積獲利</th><th scope="col">目標進度</th></tr></thead>'
+      + `<tbody>${body}</tbody></table></div></div>`;
   }
 
   /* ---------- 房貸計算 ---------- */

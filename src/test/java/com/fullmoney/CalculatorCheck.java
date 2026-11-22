@@ -251,8 +251,13 @@ public final class CalculatorCheck {
 				+ "\"deposit\":0,\"bond\":20,\"stock\":80,"));
 		check("plan portfolio search size", true, bondOrStock.contains("\"candidates\":66,\"reachable\":0") && bondOrStock.contains("\"candidates\":28,\"reachable\":14")
 				&& bondOrStock.contains("試算 139 種") && bondOrStock.contains("模擬 500 種市場走勢"));
-		check("plan candidates listed", 139, bondOrStock.split("\\[\"(CONSERVATIVE|BALANCED|AGGRESSIVE)\",").length - 1);
-		check("plan candidates chosen marked", 3, bondOrStock.split(",true\\]").length - 1);
+		//三種配置都有逐年試算；穩健型 0/60/40、100 萬、5 年：債券 60 萬 × 1.035^5、股票 40 萬 × 1.07^5，定存 0
+		check("plan allocation rows for each profile", 4, bondOrStock.split("\"rows\":\\[").length - 1);
+		check("plan no candidate list", false, bondOrStock.contains("\"candidates\":["));
+		String bondValue = money(600000 * Math.pow(1.035, 5));
+		String stockValue = money(400000 * Math.pow(1.07, 5));
+		check("plan allocation year 5 amounts", true, bondOrStock.contains("[60,1000000.00,0.00," + bondValue + "," + stockValue + ",0.00,"
+				+ money(600000 * Math.pow(1.035, 5) - 600000) + "," + money(400000 * Math.pow(1.07, 5) - 400000) + ","));
 		check("plan option probability", true, bondOrStock.contains("\"code\":\"BOND\"") && bondOrStock.contains("\"probability\":0.3180000000"));
 		check("plan portfolio deterministic", bondOrStock, plan("years=5&months=0&profit=250000"));
 		check("plan portfolio short horizon conservative", true, plan("years=2&months=0&profit=93330")
@@ -318,6 +323,11 @@ public final class CalculatorCheck {
 
 	private static String compound(String query) {
 		return call("/api/compound", query);
+	}
+
+	/** 與 API 相同的金額格式：小數兩位、HALF_EVEN */
+	private static String money(double amount) {
+		return BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_EVEN).toPlainString();
 	}
 
 	private static String plan(String query) {

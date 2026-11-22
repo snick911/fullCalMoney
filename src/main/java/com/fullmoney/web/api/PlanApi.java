@@ -24,6 +24,7 @@ import com.fullmoney.web.Params;
  * <p>參數：principal 投資本金（可為 0）、monthlyFixed 每月固定投資金額、floatMin / floatMax 每月浮動投資金額的區間（三者選填，預設 0）、
  * years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數</p>
  * <p>options 為可考慮的方案（由低風險到高風險），portfolios 為保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋），
+ * 每型的 rows 為各資產的逐年金額與獲利，
  * floating 為浮動投資取上限 high／下限 low 時的情況（沒有浮動區間時為 null），
  * rows 每列為 [第幾個月底, 累積投入, 金額, 累積獲利, 累積報酬率]</p>
  */
@@ -116,7 +117,6 @@ public final class PlanApi extends ApiEndpoint {
 		out.put("options", options);
 		out.put("portfolioSummary", portfolioSummary(plan));
 		out.put("portfolios", portfolios(plan, whole));
-		out.put("candidates", candidates(plan, whole));
 		out.put("warnings", warnings(plan));
 		out.put("suggestions", suggestions(plan));
 		out.put("rows", rows);
@@ -156,30 +156,34 @@ public final class PlanApi extends ApiEndpoint {
 			out.put("horizon", profile.getHorizon());
 			out.put("candidates", portfolio.getCandidates());
 			out.put("reachable", portfolio.getReachable());
+			out.put("rows", allocationRows(portfolio, whole));
 			list.add(out);
 		}
 		return list;
 	}
 
 	/**
-	 * 所有試算過的配置（依達成機率排序），每筆為 [類型代碼, 類型, 定存, 債券, 股票, 一般行情報酬率, 預估波動, 達成機率, 期滿金額中位數,
-	 * 是否為該型的最佳配置]
+	 * 配置的逐年試算，每列為 [第幾個月底, 累積投入, 定存金額, 債券金額, 股票金額, 定存獲利, 債券獲利, 股票獲利, 總金額, 累積獲利]
 	 */
-	private static List<Object[]> candidates(InvestmentPlan plan, boolean whole) {
-		List<Object[]> list = new ArrayList<>();
-		for (InvestmentPlan.Candidate candidate : plan.getCandidates()) {
-			boolean chosen = false;
-			for (InvestmentPlan.Portfolio portfolio : plan.getPortfolios()) {
-				chosen |= portfolio.getProfile() == candidate.getProfile() && portfolio.getDeposit() == candidate.getDeposit()
-						&& portfolio.getBond() == candidate.getBond() && portfolio.getStock() == candidate.getStock();
+	private static List<Object[]> allocationRows(InvestmentPlan.Portfolio portfolio, boolean whole) {
+		List<Object[]> rows = new ArrayList<>();
+		for (InvestmentPlan.AllocationRow row : portfolio.getRows()) {
+			Object[] out = new Object[10];
+			BigDecimal invested = BigDecimal.ZERO;
+			BigDecimal total = BigDecimal.ZERO;
+			out[0] = row.getMonths();
+			for (int i = 0; i < 3; i++) {
+				invested = invested.add(row.getInvested()[i]);
+				total = total.add(row.getValues()[i]);
+				out[2 + i] = Values.money(row.getValues()[i], whole);
+				out[5 + i] = Values.money(row.getValues()[i].subtract(row.getInvested()[i]), whole);
 			}
-			list.add(new Object[] { candidate.getProfile().name(), candidate.getProfile().getName(), candidate.getDeposit(), candidate.getBond(),
-					candidate.getStock(), Values.ratio(BigDecimal.valueOf(candidate.getTypicalRate())),
-					BigDecimal.valueOf(candidate.getVolatility()).setScale(4, RoundingMode.HALF_UP),
-					BigDecimal.valueOf(candidate.getProbability()).setScale(4, RoundingMode.HALF_UP),
-					Values.money(BigDecimal.valueOf(candidate.getMedian()), whole), chosen });
+			out[1] = Values.money(invested, whole);
+			out[8] = Values.money(total, whole);
+			out[9] = Values.money(total.subtract(invested), whole);
+			rows.add(out);
 		}
-		return list;
+		return rows;
 	}
 
 	/** 達成機率的程度：HIGH 75% 以上、LIKELY 50% 以上、STRETCH 25% 以上、LOW 其他 */

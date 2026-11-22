@@ -103,6 +103,38 @@ public class InvestmentPlan {
 		}
 	}
 
+	/**
+	 * 資產配置的逐年試算一列：第 months 個月底，定存／債券／股票各自的累積投入與金額
+	 *
+	 * <p>本金與每月投資依配置比例分到三種資產，之後各自以一般行情報酬率逐月複利，不做再平衡。</p>
+	 */
+	public static final class AllocationRow {
+
+		private final int months;
+		private final BigDecimal[] invested;
+		private final BigDecimal[] values;
+
+		public AllocationRow(int months, BigDecimal[] invested, BigDecimal[] values) {
+			this.months = months;
+			this.invested = invested;
+			this.values = values;
+		}
+
+		public int getMonths() {
+			return months;
+		}
+
+		/** 定存、債券、股票的累積投入 */
+		public BigDecimal[] getInvested() {
+			return invested;
+		}
+
+		/** 定存、債券、股票的金額 */
+		public BigDecimal[] getValues() {
+			return values;
+		}
+	}
+
 	/** 一種資產配置類型的最佳配置（定存／債券／股票）：模擬達成機率最高者 */
 	public static final class Portfolio {
 
@@ -119,9 +151,11 @@ public class InvestmentPlan {
 		private final boolean horizonOk;
 		private final int candidates;
 		private final int reachable;
+		private final List<AllocationRow> rows;
 
 		public Portfolio(AllocationProfile profile, int[] weights, BigDecimal typicalRate, BigDecimal volatility, BigDecimal probability,
-				BigDecimal[] outcomes, boolean horizonOk, int candidates, int reachable) {
+				BigDecimal[] outcomes, boolean horizonOk, int candidates, int reachable, List<AllocationRow> rows) {
+			this.rows = rows;
 			this.profile = profile;
 			this.deposit = weights[0];
 			this.bond = weights[1];
@@ -176,6 +210,11 @@ public class InvestmentPlan {
 			return reachable;
 		}
 
+		/** 逐年試算：各資產的累積投入與金額（一般行情） */
+		public List<AllocationRow> getRows() {
+			return rows;
+		}
+
 		public int getDeposit() {
 			return deposit;
 		}
@@ -199,7 +238,7 @@ public class InvestmentPlan {
 		}
 	}
 
-	/** 一種試算過的配置（每 5% 一級搜尋中的一筆） */
+	/** 一種試算過的配置（每 5% 一級搜尋中的一筆），用於挑選最佳配置 */
 	public static final class Candidate {
 
 		private final AllocationProfile profile;
@@ -307,7 +346,6 @@ public class InvestmentPlan {
 	private Case highCase;
 	private List<Option> options;
 	private List<Portfolio> portfolios;
-	private List<Candidate> candidates;
 	private AllocationProfile recommendedProfile;
 	private List<Row> rows;
 	private BigDecimal extendedRate;
@@ -440,15 +478,6 @@ public class InvestmentPlan {
 
 	public void setPortfolios(List<Portfolio> portfolios) {
 		this.portfolios = portfolios;
-	}
-
-	/** 所有試算過的配置，依達成機率由高到低（同機率波動低者在前） */
-	public List<Candidate> getCandidates() {
-		return candidates;
-	}
-
-	public void setCandidates(List<Candidate> candidates) {
-		this.candidates = candidates;
 	}
 
 	/** 建議的配置類型，三種都達不到時為 null */
