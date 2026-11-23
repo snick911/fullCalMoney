@@ -16,13 +16,23 @@ import com.fullmoney.bean.AllocationProfile;
 import com.fullmoney.bean.BondCondition;
 import com.fullmoney.bean.BondResult;
 import com.fullmoney.bean.CouponFrequency;
+import com.fullmoney.bean.GlidePath;
+import com.fullmoney.bean.InvestmentPlan;
+import com.fullmoney.bean.InvestmentTier;
 import com.fullmoney.bean.MortgagePrepayment;
+import com.fullmoney.bean.PlanSettings;
 import com.fullmoney.bean.MortgageRateChange;
 import com.fullmoney.bean.MortgageResult;
 import com.fullmoney.bean.PrepaymentMode;
+import com.fullmoney.bean.RebalanceMode;
 import com.fullmoney.bean.RepaymentMethod;
+import com.fullmoney.bean.ReturnDistribution;
 import com.fullmoney.bean.SaveMoney;
+import com.fullmoney.bean.StressScenario;
+import com.fullmoney.bean.StressTiming;
+import com.fullmoney.service.Allocation;
 import com.fullmoney.service.BondCalculator;
+import com.fullmoney.service.CashFlows;
 import com.fullmoney.service.CurrencyConverter;
 import com.fullmoney.service.FloatingMoneyCalculator;
 import com.fullmoney.service.InvestmentPlanner;
@@ -244,21 +254,26 @@ public final class CalculatorCheck {
 		check("plan options bond or stock", "GOV_BOND CORPORATE_BOND STOCK_INCOME", optionCodes(bondOrStock));
 		//資產配置：定存／公債／公司債／股票每 5% 一級（股票再選等級），近似篩選後模擬，每型取機率最高（2 個百分點內取波動低）
 		check("plan portfolio conservative best", true, bondOrStock.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":true,"
-				+ "\"weights\":[0,60,20,20],\"stockLevel\":\"STOCK_CORE\"") && bondOrStock.contains("\"probability\":0.6120000000,\"chance\":\"LIKELY\""));
+				+ "\"weights\":[0,60,20,20],\"stockLevel\":\"STOCK_CORE\"") && bondOrStock.contains("\"probability\":0.6300000000,\"chance\":\"LIKELY\""));
 		check("plan portfolio balanced best", true, bondOrStock.contains("\"code\":\"BALANCED\",\"name\":\"穩健型\",\"recommended\":false,"
-				+ "\"weights\":[0,45,25,30],\"stockLevel\":\"STOCK_CORE\""));
+				+ "\"weights\":[0,40,30,30],\"stockLevel\":\"STOCK_GROWTH\""));
 		check("plan portfolio aggressive best", true, bondOrStock.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\",\"recommended\":false,"
 				+ "\"weights\":[0,25,25,50],\"stockLevel\":\"STOCK_AGGRESSIVE\""));
 		check("plan portfolio search size", true, bondOrStock.contains("\"candidates\":605,") && bondOrStock.contains("\"candidates\":585,")
 				&& bondOrStock.contains("\"candidates\":840,") && bondOrStock.contains("試算 2,030 種") && bondOrStock.contains("模擬 500 種市場走勢"));
-		//三種配置都有逐年試算；保守型 0/60/20/20、100 萬、5 年：公債 60 萬 × 1.04^5、公司債與穩健型股票各 20 萬 × 1.07^5
+		//三種配置都有逐年試算；保守型 0/60/20/20、100 萬、5 年、每年再平衡：前 4 年整體以加權 5.2% 成長，第 5 年各資產依自己的報酬率成長
 		check("plan allocation rows for each profile", 4, bondOrStock.split("\"rows\":\\[").length - 1);
 		check("plan no candidate list", false, bondOrStock.contains("\"candidates\":["));
-		String govValue = money(600000 * Math.pow(1.04, 5));
-		String sevenValue = money(200000 * Math.pow(1.07, 5));
-		check("plan allocation year 5 amounts", true, bondOrStock.contains("[60,1000000.00,0.00," + govValue + "," + sevenValue + "," + sevenValue + ",0.00,"
-				+ money(600000 * Math.pow(1.04, 5) - 600000) + ","));
-		check("plan option probability", true, bondOrStock.contains("\"code\":\"GOV_BOND\"") && bondOrStock.contains("\"probability\":0.3760000000"));
+		double fourYears = 1000000 * Math.pow(1.052, 4);
+		double[] yearFive = numbers(bondOrStock, "[60,1000000.00,0.00,");
+		check("plan allocation year 5 rebalanced", true, Math.abs(yearFive[3] - fourYears * 0.6 * 1.04) < 0.02 && Math.abs(yearFive[4] - fourYears * 0.2 * 1.07) < 0.02
+				&& Math.abs(yearFive[5] - fourYears * 0.2 * 1.07) < 0.02);
+		//各資產的累積獲利加總 = 總金額 − 投入；再平衡只搬動金額
+		check("plan allocation gains add up", true, Math.abs(yearFive[6] + yearFive[7] + yearFive[8] + yearFive[9] - (yearFive[10] - 1000000)) < 0.05
+				&& Math.abs(yearFive[11] - (yearFive[10] - 1000000)) < 0.05);
+		check("plan option probability", true, bondOrStock.contains("\"code\":\"GOV_BOND\"") && bondOrStock.contains("\"probability\":0.4000000000"));
+		check("plan strategies default selected", true, bondOrStock.contains("\"code\":\"FIXED_YEARLY\",\"name\":\"固定比例（每年再平衡）\",\"selected\":true")
+				&& bondOrStock.contains("\"code\":\"TARGET_DATE\",") && bondOrStock.contains("\"code\":\"AGE_RULE\",") && bondOrStock.contains("\"stress\":null"));
 		check("plan portfolio deterministic", bondOrStock, plan("years=5&months=0&profit=250000"));
 		check("plan portfolio short horizon conservative", true, plan("years=2&months=0&profit=93330")
 				.contains("\"code\":\"CONSERVATIVE\",\"name\":\"保守型\",\"recommended\":true"));
@@ -271,7 +286,7 @@ public final class CalculatorCheck {
 		String small = plan("years=5&months=0&profit=51010");
 		check("plan options small target", "DEPOSIT GOV_BOND", optionCodes(small));
 		//目標很容易時，定存上限讓配置不會變成「定存 70%」這種組合
-		check("plan portfolio deposit cap", true, small.contains("\"weights\":[50,45,0,5]") && small.contains("\"weights\":[15,50,5,30]"));
+		check("plan portfolio deposit cap", true, small.contains("\"weights\":[50,45,0,5]") && small.contains("\"weights\":[25,45,0,30]"));
 		check("plan zero profit only deposit", "DEPOSIT", optionCodes(plan("years=3&months=6&profit=0")));
 		String shortBond = plan("years=2&months=0&profit=93330");
 		check("plan short horizon options capped", "GOV_BOND CORPORATE_BOND STOCK_INCOME STOCK_CORE", optionCodes(shortBond));
@@ -279,9 +294,9 @@ public final class CalculatorCheck {
 		check("plan speculative single option", "SPECULATIVE", optionCodes(doubled));
 
 		//蒙地卡羅模擬：波動為 0 時與逐月複利公式相同；常態亂數的平均與標準差；中位數接近一般行情
-		MarketSimulator noRisk = new MarketSimulator(30);
-		double flat = noRisk.simulate(1000000, 10000, 0.05, 0)[0];
-		check("simulator zero volatility = formula", true, Math.abs(flat - InvestmentPlanner.futureValue(1000000, 10000, 0.05, 30)) < 1e-4);
+		MarketSimulator noRisk = new MarketSimulator(CashFlows.of(1000000, 10000, 30), ReturnDistribution.NORMAL);
+		double flat = noRisk.simulate(Allocation.single(InvestmentTier.DEPOSIT, noRisk.getSteps()), 0).getFinals()[0];
+		check("simulator zero volatility = formula", true, Math.abs(flat - InvestmentPlanner.futureValue(1000000, 10000, 0.0175, 30)) < 1e-4);
 		RangeRandom gaussian = new RangeRandom(1);
 		double sum = 0;
 		double squares = 0;
@@ -292,7 +307,8 @@ public final class CalculatorCheck {
 		}
 		double mean = sum / 20000;
 		check("random gaussian mean and sd", true, Math.abs(mean) < 0.03 && Math.abs(Math.sqrt(squares / 20000 - mean * mean) - 1) < 0.03);
-		double median = MarketSimulator.percentile(new MarketSimulator(60).simulate(1000000, 0, 0.07, 0.18), 0.5);
+		double median = new MarketSimulator(CashFlows.of(1000000, 0, 60), ReturnDistribution.NORMAL)
+				.simulate(Allocation.single(InvestmentTier.STOCK_CORE, 5), 0).percentile(0.5);
 		check("simulator median near typical", true, Math.abs(median / (1000000 * Math.pow(1.07, 5)) - 1) < 0.05);
 		check("simulator probability and percentile", "0.5 5.0", MarketSimulator.probability(new double[] { 1, 2, 3, 4 }, 2.5) + " "
 				+ MarketSimulator.percentile(new double[] { 0, 10 }, 0.5));
@@ -316,6 +332,79 @@ public final class CalculatorCheck {
 		check("plan needs money", true, call("/api/plan", "principal=0&years=1&months=0&profit=1").contains("\"field\":\"principal\""));
 		check("plan infeasible monthly suggestion", true, call("/api/plan", "principal=1%2C000%2C000&monthlyFixed=5%2C000&years=2&months=0&profit=1%2C000%2C000")
 				.contains("增加每月投資"));
+
+		//配置調整：目標日期在最後 5 年逐年降到一半；年齡法則股票 ≤ 100 − 當年年齡；固定比例不變
+		int[] quarterStock = { 0, 55, 20, 25 };
+		Allocation targetDate = Allocation.of(quarterStock, InvestmentTier.STOCK_CORE, GlidePath.TARGET_DATE, RebalanceMode.YEARLY, 35, 10);
+		check("glide target date end and average", true, Math.abs(targetDate.endStockPercent() - 12.5) < 1e-9
+				&& Math.abs(targetDate.averageWeights()[3] - 0.2125) < 1e-9 && Math.abs(targetDate.averageWeights()[1] - (0.55 + 0.0375)) < 1e-9);
+		check("glide age rule caps stock", true, Math.abs(Allocation.of(new int[] { 0, 30, 0, 70 }, InvestmentTier.STOCK_CORE, GlidePath.AGE_RULE,
+				RebalanceMode.YEARLY, 40, 10).endStockPercent() - 51) < 1e-9);
+		check("glide fixed keeps stock", true, Math.abs(Allocation.of(quarterStock, InvestmentTier.STOCK_CORE, GlidePath.FIXED, RebalanceMode.NONE, 35, 10)
+				.endStockPercent() - 25) < 1e-9);
+		//不再平衡時，一般行情下各資產各自複利（與舊版逐年試算相同）
+		List<MarketSimulator.Snapshot> drift = MarketSimulator.typical(CashFlows.of(1000000, 0, 60)).trace(Allocation.of(new int[] { 0, 60, 20, 20 },
+				InvestmentTier.STOCK_CORE, GlidePath.FIXED, RebalanceMode.NONE, 35, 5));
+		double[] driftEnd = drift.get(drift.size() - 1).getValues();
+		check("rebalance none drifts", true, drift.size() == 5 && Math.abs(driftEnd[1] - 600000 * Math.pow(1.04, 5)) < 1e-6
+				&& Math.abs(driftEnd[3] - 200000 * Math.pow(1.07, 5)) < 1e-6);
+
+		//中途提領：月份排序合併；需要的報酬率讓期滿金額 = 投入 − 提領 + 獲利；不可提領尚未投入的錢
+		CashFlows withdrawFlows = new CashFlows(1000000, 10000, 120, new int[] { 96, 36, 96 }, new double[] { 200000, 500000, 100000 });
+		double withdrawRate = InvestmentPlanner.requiredRate(withdrawFlows, 1000000);
+		check("withdraw flows sorted and merged", "36 96 800000.0", withdrawFlows.getWithdrawMonths()[0] + " " + withdrawFlows.getWithdrawMonths()[1] + " "
+				+ withdrawFlows.withdrawn());
+		check("withdraw solver hits target", true, Math.abs(withdrawFlows.futureValue(withdrawRate) - 2400000) < 0.01);
+		check("withdraw overdrawn month", 12, new CashFlows(100000, 10000, 60, new int[] { 12 }, new double[] { 300000 }).firstOverdrawnMonth());
+		String withdraw = call("/api/plan", "principal=1%2C000%2C000&monthlyFixed=10%2C000&years=10&months=0&profit=1%2C000%2C000"
+				+ "&withdrawMonth=36&withdrawAmount=500%2C000&withdrawMonth=96&withdrawAmount=300%2C000");
+		check("plan withdraw target", true, withdraw.contains("\"withdrawn\":800000.00,") && withdraw.contains("\"target\":2400000.00,")
+				&& withdraw.contains("[120,2200000.00,2400000.00,1000000.00,") && withdraw.contains("中途提領 2 筆共 $800,000"));
+		check("plan withdraw lowers rate need", true, withdraw.contains("\"requiredRate\":0.0632590000,"));
+		check("plan withdraw overdrawn field", true, call("/api/plan", "principal=100000&monthlyFixed=10000&years=5&months=0&profit=100000"
+				+ "&withdrawMonth=12&withdrawAmount=300000").contains("\"field\":\"withdrawAmount:0\""));
+		check("plan withdraw month range", true, call("/api/plan", "principal=1000000&years=5&months=0&profit=100000&withdrawMonth=61&withdrawAmount=1000")
+				.contains("\"field\":\"withdrawMonth:0\""));
+
+		//年齡法則：60 歲股票上限 40%，積極型沒有可用配置，穩健型只剩股票 30%～40%
+		String aged = call("/api/plan", "principal=1000000&monthlyFixed=10000&years=10&months=0&profit=1000000&glide=AGE_RULE&age=60");
+		check("plan age rule excludes aggressive", true, !aged.contains("\"code\":\"AGGRESSIVE\",\"name\":\"積極型\"") && aged.contains("積極型沒有可用的配置")
+				&& aged.contains("\"candidates\":441,") && aged.contains("\"code\":\"AGE_RULE\",\"name\":\"依年齡法則（股票 ≤ 100 − 年齡）\",\"selected\":true"));
+		check("plan invalid glide", true, call("/api/plan", "principal=1000000&years=5&months=0&profit=1&glide=FOO").contains("\"field\":\"glide\""));
+		check("plan invalid age", true, call("/api/plan", "principal=1000000&years=5&months=0&profit=1&age=0").contains("\"field\":\"age\""));
+
+		//壓力測試：同一組走勢，情境年份換成情境報酬；金融海嘯發生在期滿前一年時每型的達成機率都下降
+		PlanSettings crashSettings = new PlanSettings();
+		crashSettings.setStress(StressScenario.CRASH);
+		crashSettings.setStressTiming(StressTiming.END);
+		InvestmentPlan crash = new InvestmentPlanner().plan(new BigDecimal("1000000"), new BigDecimal("10000"), BigDecimal.ZERO, BigDecimal.ZERO, 120,
+				new BigDecimal("1500000"), crashSettings);
+		boolean allLower = crash.getStressFrom() == 9 && crash.getStressYears() == 1;
+		for (InvestmentPlan.Portfolio portfolio : crash.getPortfolios()) {
+			allLower &= portfolio.getStressOutcome().getProbability().compareTo(portfolio.getProbability()) < 0
+					&& portfolio.getStressOutcome().getMedian().compareTo(portfolio.getMedian()) < 0;
+		}
+		check("stress crash lowers every profile", true, allLower);
+		PlanSettings stagnation = new PlanSettings();
+		stagnation.setStress(StressScenario.STAGNATION);
+		stagnation.setStressTiming(StressTiming.START);
+		InvestmentPlan flat5 = new InvestmentPlanner().plan(new BigDecimal("1000000"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 36,
+				new BigDecimal("100000"), stagnation);
+		check("stress stagnation span capped", "0 3", flat5.getStressFrom() + " " + flat5.getStressYears());
+		String stressQuery = "principal=1000000&monthlyFixed=10000&years=10&months=0&profit=1500000&stress=CRASH&stressTiming=END&distribution=FAT_TAIL";
+		String stressed = call("/api/plan", stressQuery);
+		check("plan stress output", true, stressed.contains("\"stress\":{\"code\":\"CRASH\",\"name\":\"金融海嘯\"") && stressed.contains("\"period\":\"第 10 年\"")
+				&& stressed.contains("假設在期滿前（第 10 年）發生金融海嘯"));
+		check("plan stress deterministic", stressed, call("/api/plan", stressQuery));
+
+		//厚尾分布：標準差相同，但極端年份較多，最差 1% 的結果更差
+		CashFlows thirtyYears = CashFlows.of(1000000, 0, 360);
+		Allocation volatile30 = Allocation.single(InvestmentTier.STOCK_VOLATILE, 30);
+		MarketSimulator.Outcome normal30 = new MarketSimulator(thirtyYears, ReturnDistribution.NORMAL).simulate(volatile30, 0);
+		MarketSimulator.Outcome fat30 = new MarketSimulator(thirtyYears, ReturnDistribution.FAT_TAIL).simulate(volatile30, 0);
+		check("fat tail worse worst case", true, fat30.percentile(0.01) < normal30.percentile(0.01));
+		check("meta plan options", true, call("/api/meta", "").contains("\"glidePaths\":[{\"code\":\"FIXED\"")
+				&& call("/api/meta", "").contains("\"stressScenarios\":[{\"code\":\"NONE\""));
 		check("numbers group negative", "-1,234,567.5", Numbers.group(new BigDecimal("-1234567.50"), 2));
 		check("numbers group small", "0.0001", Numbers.group(new BigDecimal("0.0001"), 4));
 		check("numbers group billion", "1,000,000,000", Numbers.group(new BigDecimal("1000000000"), 4));
@@ -332,6 +421,20 @@ public final class CalculatorCheck {
 
 	private static String plan(String query) {
 		return call("/api/plan", "principal=1%2C000%2C000&" + query);
+	}
+
+	/** JSON 中以 prefix 開頭的陣列的所有數字（含 prefix 內的數字）；找不到時為空陣列 */
+	private static double[] numbers(String json, String prefix) {
+		int start = json.indexOf(prefix);
+		if (start < 0) {
+			return new double[13];
+		}
+		String[] parts = json.substring(start + 1, json.indexOf(']', start)).split(",");
+		double[] values = new double[parts.length];
+		for (int i = 0; i < parts.length; i++) {
+			values[i] = Double.parseDouble(parts[i]);
+		}
+		return values;
 	}
 
 	/** 投資計畫回應中 options 的類別代碼，以空白分隔 */

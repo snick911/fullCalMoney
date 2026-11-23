@@ -8,8 +8,13 @@ import java.util.Map;
 import com.fullmoney.AppVersion;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
+import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.PrepaymentMode;
+import com.fullmoney.bean.RebalanceMode;
 import com.fullmoney.bean.RepaymentMethod;
+import com.fullmoney.bean.ReturnDistribution;
+import com.fullmoney.bean.StressScenario;
+import com.fullmoney.bean.StressTiming;
 import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.Params;
 
@@ -46,6 +51,27 @@ public final class MetaApi extends ApiEndpoint {
 		for (PrepaymentMode mode : PrepaymentMode.values()) {
 			modes.add(option(mode.name(), mode.getLabel(), null, null));
 		}
+		//投資計畫的模擬設定
+		List<Map<String, Object>> glides = new ArrayList<>();
+		for (GlidePath glide : GlidePath.values()) {
+			glides.add(option(glide.name(), glide.getLabel(), null, null));
+		}
+		List<Map<String, Object>> rebalances = new ArrayList<>();
+		for (RebalanceMode rebalance : RebalanceMode.values()) {
+			rebalances.add(option(rebalance.name(), rebalance.getLabel(), null, null));
+		}
+		List<Map<String, Object>> distributions = new ArrayList<>();
+		for (ReturnDistribution distribution : ReturnDistribution.values()) {
+			distributions.add(option(distribution.name(), distribution.getLabel(), null, null));
+		}
+		List<Map<String, Object>> stresses = new ArrayList<>();
+		for (StressScenario stress : StressScenario.values()) {
+			stresses.add(option(stress.name(), stress.getLabel(), "description", stress.getDescription()));
+		}
+		List<Map<String, Object>> timings = new ArrayList<>();
+		for (StressTiming timing : StressTiming.values()) {
+			timings.add(option(timing.name(), timing.getLabel(), null, null));
+		}
 
 		Map<String, Object> meta = new LinkedHashMap<>();
 		meta.put("name", AppVersion.NAME);
@@ -54,6 +80,11 @@ public final class MetaApi extends ApiEndpoint {
 		meta.put("frequencies", frequencies);
 		meta.put("repaymentMethods", methods);
 		meta.put("prepaymentModes", modes);
+		meta.put("glidePaths", glides);
+		meta.put("rebalanceModes", rebalances);
+		meta.put("returnDistributions", distributions);
+		meta.put("stressScenarios", stresses);
+		meta.put("stressTimings", timings);
 		return meta;
 	}
 

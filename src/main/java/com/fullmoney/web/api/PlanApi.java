@@ -8,9 +8,16 @@ import java.util.List;
 import java.util.Map;
 
 import com.fullmoney.bean.AllocationProfile;
+import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.InvestmentPlan;
 import com.fullmoney.bean.InvestmentPlan.Fit;
 import com.fullmoney.bean.InvestmentTier;
+import com.fullmoney.bean.PlanSettings;
+import com.fullmoney.bean.RebalanceMode;
+import com.fullmoney.bean.ReturnDistribution;
+import com.fullmoney.bean.StressScenario;
+import com.fullmoney.bean.StressTiming;
+import com.fullmoney.service.CashFlows;
 import com.fullmoney.service.InvestmentPlanner;
 import com.fullmoney.service.MarketSimulator;
 import com.fullmoney.web.ApiEndpoint;
@@ -22,17 +29,30 @@ import com.fullmoney.web.Params;
  * 投資計畫：算出需要的年化報酬率，列出可以達成的方案與配置建議
  *
  * <p>參數：principal 投資本金（可為 0）、monthlyFixed 每月固定投資金額、floatMin / floatMax 每月浮動投資金額的區間（三者選填，預設 0）、
- * years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數</p>
- * <p>options 為可考慮的方案（由低風險到高風險），portfolios 為保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋），
- * 每型的 weights 為定存／公債／公司債／股票比例、stockLevel 為股票等級、rows 為各資產的逐年金額與獲利，
+ * years 投資年數、months 月數(0～11)、profit 期望獲利金額、round=1 金額四捨五入到整數；
+ * 模擬設定（皆選填）：age 目前年齡、glide 配置調整方式（{@link GlidePath}）、rebalance 再平衡方式（{@link RebalanceMode}）、
+ * distribution 報酬分布（{@link ReturnDistribution}）、stress 壓力測試情境（{@link StressScenario}）、stressTiming 情境發生時間（{@link StressTiming}），
+ * 中途提領以 withdrawMonth（第幾個月底）與 withdrawAmount 成對重複送出</p>
+ * <p>options 為可考慮的方案（由低風險到高風險），portfolios 為保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋；年齡法則下沒有可用配置的類型不列出），
+ * 每型的 weights 為定存／公債／公司債／股票比例、stockLevel 為股票等級、endStock 為最後一年的股票比例、stress 為壓力情境下的結果、
+ * rows 為各資產的逐年金額與獲利；strategies 為同樣配置在 5 種調整方式下的結果（outcomes 與 portfolios 順序相同），
  * floating 為浮動投資取上限 high／下限 low 時的情況（沒有浮動區間時為 null），
- * rows 每列為 [第幾個月底, 累積投入, 金額, 累積獲利, 累積報酬率]</p>
+ * rows 每列為 [第幾個月底, 累積投入, 金額, 累積獲利, 累積報酬率, 累積提領]</p>
  */
 public final class PlanApi extends ApiEndpoint {
 
 	private static final int MONTHS_PER_YEAR = 12;
 	private static final int MAX_YEAR = 100;
 	private static final String MAX_PROFIT = "100000000000";
+	private static final int MIN_AGE = 1;
+	private static final int MAX_AGE = 100;
+	private static final int MAX_WITHDRAWALS = 20;
+
+	/** 策略比較：達成機率相差不到 2 個百分點視為模擬誤差 */
+	private static final double STRATEGY_NOISE = 0.02;
+
+	/** 策略比較：悲觀金額高出 1% 以上才提出 */
+	private static final BigDecimal SAFER = new BigDecimal("1.01");
 
 	private final InvestmentPlanner planner = new InvestmentPlanner();
 
@@ -60,7 +80,8 @@ public final class PlanApi extends ApiEndpoint {
 		if (principal.signum() == 0 && monthlyFixed.signum() == 0 && floatMax.signum() == 0) {
 			throw new BadRequestException("principal", "請輸入投資本金或每月投資金額。");
 		}
-		InvestmentPlan plan = planner.plan(principal, monthlyFixed, floatMin, floatMax, months, profit);
+		PlanSettings settings = settings(params, principal, monthlyFixed.add(floatMin), months);
+		InvestmentPlan plan = planner.plan(principal, monthlyFixed, floatMin, floatMax, months, profit, settings);
 		BigDecimal target = plan.getTarget();
 
 		List<Map<String, Object>> options = new ArrayList<>();
@@ -87,11 +108,13 @@ public final class PlanApi extends ApiEndpoint {
 			options.add(out);
 		}
 
+		//獲利 = 金額 + 已提領 − 投入
 		List<Object[]> rows = new ArrayList<>();
 		for (InvestmentPlan.Row row : plan.getRows()) {
-			BigDecimal gain = row.getBalance().subtract(row.getInvested());
+			BigDecimal gain = row.getBalance().add(row.getWithdrawn()).subtract(row.getInvested());
 			rows.add(new Object[] { row.getMonths(), Values.money(row.getInvested(), whole), Values.money(row.getBalance(), whole),
-					Values.money(gain, whole), Values.ratio(gain.divide(row.getInvested(), 10, RoundingMode.HALF_UP)) });
+					Values.money(gain, whole), Values.ratio(gain.divide(row.getInvested(), 10, RoundingMode.HALF_UP)),
+					Values.money(row.getWithdrawn(), whole) });
 		}
 
 		Map<String, Object> floating = null;
@@ -106,6 +129,7 @@ public final class PlanApi extends ApiEndpoint {
 		out.put("months", months);
 		out.put("monthly", Values.money(plan.getMonthly(), whole));
 		out.put("invested", Values.money(plan.getInvested(), whole));
+		out.put("withdrawn", Values.money(plan.getWithdrawn(), whole));
 		out.put("target", Values.money(target, whole));
 		out.put("totalReturn", Values.ratio(plan.getTotalReturn()));
 		out.put("requiredRate", Values.ratio(plan.getRequiredRate()));
@@ -117,6 +141,10 @@ public final class PlanApi extends ApiEndpoint {
 		out.put("options", options);
 		out.put("portfolioSummary", portfolioSummary(plan));
 		out.put("portfolios", portfolios(plan, whole));
+		out.put("settings", settingsOut(plan));
+		out.put("strategies", strategies(plan, whole));
+		out.put("strategySummary", strategySummary(plan));
+		out.put("stress", stress(plan));
 		out.put("warnings", warnings(plan));
 		out.put("suggestions", suggestions(plan));
 		out.put("rows", rows);
@@ -163,35 +191,254 @@ public final class PlanApi extends ApiEndpoint {
 			out.put("candidates", portfolio.getCandidates());
 			out.put("reachable", portfolio.getReachable());
 			out.put("simulated", portfolio.getSimulated());
+			out.put("endStock", portfolio.getEndStock());
+			out.put("stress", outcome(portfolio.getStressOutcome(), whole));
 			out.put("rows", allocationRows(portfolio, whole));
 			list.add(out);
 		}
 		return list;
 	}
 
+	/** 模擬結果摘要：達成機率與期滿金額的悲觀（第 10 百分位）、中位數、樂觀（第 90 百分位）；沒有結果時為 null */
+	private static Map<String, Object> outcome(InvestmentPlan.Outcome outcome, boolean whole) {
+		if (outcome == null) {
+			return null;
+		}
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("probability", Values.ratio(outcome.getProbability()));
+		out.put("chance", chance(outcome.getProbability().doubleValue()));
+		out.put("pessimistic", Values.money(outcome.getPessimistic(), whole));
+		out.put("median", Values.money(outcome.getMedian(), whole));
+		out.put("optimistic", Values.money(outcome.getOptimistic(), whole));
+		return out;
+	}
+
 	/**
-	 * 配置的逐年試算，每列為 [第幾個月底, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的獲利（4 欄）, 總金額, 累積獲利]
+	 * 配置的逐年試算，每列為 [第幾個月底, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的累積獲利（4 欄）, 總金額, 累積獲利, 累積提領]
 	 */
 	private static List<Object[]> allocationRows(InvestmentPlan.Portfolio portfolio, boolean whole) {
 		List<Object[]> rows = new ArrayList<>();
 		for (InvestmentPlan.AllocationRow row : portfolio.getRows()) {
 			int assets = row.getValues().length;
-			Object[] out = new Object[4 + assets * 2];
-			BigDecimal invested = BigDecimal.ZERO;
+			Object[] out = new Object[5 + assets * 2];
 			BigDecimal total = BigDecimal.ZERO;
+			BigDecimal gained = BigDecimal.ZERO;
 			out[0] = row.getMonths();
+			out[1] = Values.money(row.getInvested(), whole);
 			for (int i = 0; i < assets; i++) {
-				invested = invested.add(row.getInvested()[i]);
 				total = total.add(row.getValues()[i]);
+				gained = gained.add(row.getGains()[i]);
 				out[2 + i] = Values.money(row.getValues()[i], whole);
-				out[2 + assets + i] = Values.money(row.getValues()[i].subtract(row.getInvested()[i]), whole);
+				out[2 + assets + i] = Values.money(row.getGains()[i], whole);
 			}
-			out[1] = Values.money(invested, whole);
 			out[2 + assets * 2] = Values.money(total, whole);
-			out[3 + assets * 2] = Values.money(total.subtract(invested), whole);
+			out[3 + assets * 2] = Values.money(gained, whole);
+			out[4 + assets * 2] = Values.money(row.getWithdrawn(), whole);
 			rows.add(out);
 		}
 		return rows;
+	}
+
+	/** 讀取模擬設定；提領不可超過當時已投入的金額（以每月浮動投資的最低值計算，三種情況都付得出來） */
+	private static PlanSettings settings(Params params, BigDecimal principal, BigDecimal lowMonthly, int months) {
+		PlanSettings settings = new PlanSettings();
+		List<String> age = params.list("age");
+		if (!age.isEmpty() && !age.get(0).isBlank()) {
+			settings.setAge(Params.toInteger(age.get(0), "age", "目前年齡", MIN_AGE, MAX_AGE));
+		}
+		settings.setGlidePath(params.choice("glide", "配置調整方式", GlidePath.values(), GlidePath.FIXED));
+		settings.setRebalance(params.choice("rebalance", "再平衡方式", RebalanceMode.values(), RebalanceMode.YEARLY));
+		settings.setDistribution(params.choice("distribution", "報酬分布", ReturnDistribution.values(), ReturnDistribution.NORMAL));
+		settings.setStress(params.choice("stress", "壓力測試情境", StressScenario.values(), StressScenario.NONE));
+		settings.setStressTiming(params.choice("stressTiming", "情境發生時間", StressTiming.values(), StressTiming.END));
+
+		List<String> monthsRaw = params.list("withdrawMonth");
+		List<String> amountsRaw = params.list("withdrawAmount");
+		if (monthsRaw.size() != amountsRaw.size()) {
+			throw new BadRequestException(null, "中途提領的月份與金額筆數不一致。");
+		}
+		if (monthsRaw.size() > MAX_WITHDRAWALS) {
+			throw new BadRequestException(null, "中途提領最多 " + MAX_WITHDRAWALS + " 筆。");
+		}
+		List<PlanSettings.Withdrawal> withdrawals = new ArrayList<>();
+		int[] withdrawMonths = new int[monthsRaw.size()];
+		double[] withdrawAmounts = new double[monthsRaw.size()];
+		for (int i = 0; i < monthsRaw.size(); i++) {
+			String prefix = "中途提領第 " + (i + 1) + " 筆的";
+			int month = Params.toInteger(monthsRaw.get(i), "withdrawMonth:" + i, prefix + "月份", 1, months);
+			BigDecimal amount = Params.toDecimal(amountsRaw.get(i), "withdrawAmount:" + i, prefix + "金額", BigDecimal.ONE, new BigDecimal(Values.MAX_MONEY));
+			withdrawals.add(new PlanSettings.Withdrawal(month, amount));
+			withdrawMonths[i] = month;
+			withdrawAmounts[i] = amount.doubleValue();
+		}
+		int overdrawn = new CashFlows(principal.doubleValue(), lowMonthly.doubleValue(), months, withdrawMonths, withdrawAmounts).firstOverdrawnMonth();
+		if (overdrawn > 0) {
+			int index = 0;
+			while (withdrawMonths[index] != overdrawn) {
+				index++;
+			}
+			BigDecimal investedBy = principal.add(lowMonthly.multiply(BigDecimal.valueOf(overdrawn)));
+			throw new BadRequestException("withdrawAmount:" + index, "到第 " + overdrawn + " 個月底累計提領超過已投入的 $" + Numbers.group(investedBy, 0)
+					+ "（每月浮動投資以最低值計算），請減少金額或延後提領。");
+		}
+		settings.setWithdrawals(withdrawals);
+		return settings;
+	}
+
+	/** 模擬設定與說明文字 */
+	private static Map<String, Object> settingsOut(InvestmentPlan plan) {
+		PlanSettings settings = plan.getSettings();
+		int endAge = settings.getAge() + plan.getMonths() / MONTHS_PER_YEAR;
+		GlidePath glide = settings.getGlidePath();
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("age", settings.getAge());
+		out.put("endAge", endAge);
+		out.put("glide", glide.name());
+		out.put("glideName", glide.getLabel());
+		out.put("rebalance", settings.getRebalance().name());
+		out.put("rebalanceName", rebalanceText(settings));
+		out.put("distribution", settings.getDistribution().name());
+		out.put("distributionName", settings.getDistribution().getLabel());
+		List<Object[]> withdrawals = new ArrayList<>();
+		for (PlanSettings.Withdrawal withdrawal : settings.getWithdrawals()) {
+			withdrawals.add(new Object[] { withdrawal.getMonth(), withdrawal.getAmount() });
+		}
+		out.put("withdrawals", withdrawals);
+
+		StringBuilder text = new StringBuilder("目前 ").append(settings.getAge()).append(" 歲、期滿時約 ").append(endAge).append(" 歲；")
+				.append(glide.getLabel()).append("，").append(rebalanceText(settings)).append("，").append(settings.getDistribution().getLabel()).append("。");
+		text.append("依年齡法則，股票比例宜在 ").append(Math.max(0, GlidePath.AGE_RULE_BASE - endAge)).append("%～")
+				.append(Math.max(0, GlidePath.AGE_RULE_BASE - settings.getAge())).append("% 以下（期滿～現在）。");
+		for (AllocationProfile profile : plan.getUnavailableProfiles()) {
+			text.append("年齡法則下股票上限 ").append(settings.ageStockCap()).append("%，").append(profile.getName()).append("沒有可用的配置，不列出。");
+		}
+		if (plan.getWithdrawn().signum() > 0) {
+			text.append("中途提領 ").append(settings.getWithdrawals().size()).append(" 筆共 $").append(Numbers.group(plan.getWithdrawn(), 0))
+					.append("，目標金額已扣除提領，獲利以「期滿金額 + 提領 − 總投入」計算；提領時資產不足的走勢視為未達成。");
+		}
+		out.put("text", text.toString());
+		return out;
+	}
+
+	/** 實際的再平衡方式：逐年調整比例時每年依新比例調整 */
+	private static String rebalanceText(PlanSettings settings) {
+		return settings.getGlidePath() == GlidePath.FIXED ? settings.getRebalance().getLabel() : "每年依新比例調整";
+	}
+
+	/** 策略比較：同樣的最佳配置以 5 種調整方式模擬 */
+	private static List<Map<String, Object>> strategies(InvestmentPlan plan, boolean whole) {
+		List<Map<String, Object>> list = new ArrayList<>();
+		for (InvestmentPlan.Strategy strategy : plan.getStrategies()) {
+			Map<String, Object> out = new LinkedHashMap<>();
+			out.put("code", strategyCode(strategy));
+			out.put("name", strategyName(strategy));
+			out.put("selected", strategy.isSelected());
+			List<Map<String, Object>> outcomes = new ArrayList<>();
+			for (InvestmentPlan.Outcome outcome : strategy.getOutcomes()) {
+				outcomes.add(outcome(outcome, whole));
+			}
+			out.put("outcomes", outcomes);
+			list.add(out);
+		}
+		return list;
+	}
+
+	private static String strategyCode(InvestmentPlan.Strategy strategy) {
+		return strategy.getGlidePath() == GlidePath.FIXED ? "FIXED_" + strategy.getRebalance().name() : strategy.getGlidePath().name();
+	}
+
+	private static String strategyName(InvestmentPlan.Strategy strategy) {
+		return strategy.getGlidePath() == GlidePath.FIXED ? "固定比例（" + strategy.getRebalance().getLabel() + "）" : strategy.getGlidePath().getLabel();
+	}
+
+	/** 以建議（或機率最高）的配置比較 5 種調整方式，指出目前設定是否最好 */
+	private static String strategySummary(InvestmentPlan plan) {
+		List<InvestmentPlan.Portfolio> portfolios = plan.getPortfolios();
+		int focus = -1;
+		for (int i = 0; i < portfolios.size(); i++) {
+			if (portfolios.get(i).getProfile() == plan.getRecommendedProfile()) {
+				focus = i;
+			}
+		}
+		if (focus < 0) {
+			return "所有配置在 5 種調整方式下的達成機率都很低，調整方式無法彌補目標與期間的落差。";
+		}
+		InvestmentPlan.Strategy selected = null;
+		InvestmentPlan.Strategy best = null;
+		InvestmentPlan.Strategy safest = null;
+		for (InvestmentPlan.Strategy strategy : plan.getStrategies()) {
+			if (strategy.isSelected()) {
+				selected = strategy;
+			}
+			if (best == null || probabilityOf(strategy, focus).compareTo(probabilityOf(best, focus)) > 0) {
+				best = strategy;
+			}
+			if (safest == null || pessimisticOf(strategy, focus).compareTo(pessimisticOf(safest, focus)) > 0) {
+				safest = strategy;
+			}
+		}
+		String profile = portfolios.get(focus).getProfile().getName();
+		InvestmentPlan.Outcome current = selected.getOutcomes().get(focus);
+		StringBuilder text = new StringBuilder("以建議的").append(profile).append("配置比較 5 種調整方式：目前的設定「").append(strategyName(selected))
+				.append("」達成機率約 ").append(wholePercent(current.getProbability()));
+		BigDecimal gap = probabilityOf(best, focus).subtract(current.getProbability());
+		if (gap.signum() <= 0) {
+			text.append("，已是最高");
+		} else if (gap.doubleValue() < STRATEGY_NOISE) {
+			text.append("，與最高的「").append(strategyName(best)).append("」相差不到 2 個百分點，在模擬誤差範圍內");
+		} else {
+			InvestmentPlan.Outcome to = best.getOutcomes().get(focus);
+			text.append("；改用「").append(strategyName(best)).append("」可提高到約 ").append(wholePercent(to.getProbability()))
+					.append("，期滿金額中位數 $").append(Numbers.group(current.getMedian(), 0)).append(" → $").append(Numbers.group(to.getMedian(), 0));
+		}
+		//在意最差情況時：悲觀金額（最差 10%）明顯較高的方式
+		BigDecimal floor = pessimisticOf(safest, focus);
+		if (safest != selected && floor.compareTo(current.getPessimistic().multiply(SAFER)) > 0) {
+			text.append("。若更在意最差情況，「").append(strategyName(safest)).append("」的悲觀金額最高，約 $").append(Numbers.group(floor, 0))
+					.append("（目前 $").append(Numbers.group(current.getPessimistic(), 0)).append("）");
+		}
+		return text.append("。").toString();
+	}
+
+	private static BigDecimal pessimisticOf(InvestmentPlan.Strategy strategy, int portfolio) {
+		return strategy.getOutcomes().get(portfolio).getPessimistic();
+	}
+
+	private static BigDecimal probabilityOf(InvestmentPlan.Strategy strategy, int portfolio) {
+		return strategy.getOutcomes().get(portfolio).getProbability();
+	}
+
+	/** 壓力情境：名稱、說明、發生的年份與對建議配置的影響；沒有做壓力測試時為 null */
+	private static Map<String, Object> stress(InvestmentPlan plan) {
+		PlanSettings settings = plan.getSettings();
+		StressScenario scenario = settings.getStress();
+		if (scenario == StressScenario.NONE) {
+			return null;
+		}
+		int from = plan.getStressFrom() + 1;
+		int to = plan.getStressFrom() + plan.getStressYears();
+		String period = from == to ? "第 " + from + " 年" : "第 " + from + "～" + to + " 年";
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("code", scenario.name());
+		out.put("name", scenario.getLabel());
+		out.put("description", scenario.getDescription());
+		out.put("timing", settings.getStressTiming().name());
+		out.put("timingName", settings.getStressTiming().getLabel());
+		out.put("period", period);
+
+		StringBuilder text = new StringBuilder("假設在").append(settings.getStressTiming().getLabel()).append("（").append(period).append("）發生")
+				.append(scenario.getLabel()).append("：").append(scenario.getDescription()).append("。");
+		for (InvestmentPlan.Portfolio portfolio : plan.getPortfolios()) {
+			if (portfolio.getProfile() != plan.getRecommendedProfile()) {
+				continue;
+			}
+			InvestmentPlan.Outcome stressed = portfolio.getStressOutcome();
+			text.append("建議的").append(portfolio.getProfile().getName()).append("達成機率由 ").append(wholePercent(portfolio.getProbability()))
+					.append(" 變為 ").append(wholePercent(stressed.getProbability())).append("，期滿金額中位數由 $")
+					.append(Numbers.group(portfolio.getMedian(), 0)).append(" 變為 $").append(Numbers.group(stressed.getMedian(), 0)).append("。");
+		}
+		out.put("text", text.toString());
+		return out;
 	}
 
 	/** 達成機率的程度：HIGH 75% 以上、LIKELY 50% 以上、STRETCH 25% 以上、LOW 其他 */
@@ -219,9 +466,12 @@ public final class PlanApi extends ApiEndpoint {
 				recommended = portfolio;
 			}
 		}
+		PlanSettings settings = plan.getSettings();
 		StringBuilder text = new StringBuilder("以每 5% 一級試算 ").append(Numbers.group(BigDecimal.valueOf(total), 0))
 				.append(" 種定存／公債／公司債／股票配置（股票再分 5 個等級），估計約 ").append(Numbers.group(BigDecimal.valueOf(reachable), 0))
-				.append(" 種達成機率超過 50%；再把較好的 ").append(simulated).append(" 種各模擬 ").append(MarketSimulator.PATHS).append(" 種市場走勢。");
+				.append(" 種達成機率超過 50%；再把較好的 ").append(simulated).append(" 種各模擬 ").append(MarketSimulator.PATHS)
+				.append(" 種市場走勢（四種資產分別模擬、彼此連動；").append(settings.getGlidePath().getLabel()).append("，").append(rebalanceText(settings))
+				.append("，").append(settings.getDistribution().getLabel()).append("）。");
 		if (recommended == null) {
 			return text.append("所有配置的達成機率都是 0，需要延長期間、增加投入或調整目標。").toString();
 		}

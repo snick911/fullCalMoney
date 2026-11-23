@@ -538,6 +538,52 @@
           </div>
         </fieldset>
       </div>
+      <div class="advanced">
+        <details class="sublist" data-plan-settings open>
+          <summary><span>模擬設定</span></summary>
+          <div class="sublist__body">
+            <p class="sublist__desc">定存、公債、公司債、股票分別模擬 500 種市場走勢，彼此連動（股市大跌時公司債通常也跌）。可設定再平衡、逐年降低股票比例、報酬分布，並用歷史情境做壓力測試。</p>
+            <div class="fields fields--settings">
+              <div class="field">
+                <label for="p-age">目前年齡</label>
+                <div class="input-wrap"><input class="input" id="p-age" name="age" inputmode="numeric" value="35"><span class="input-affix">歲</span></div>
+              </div>
+              <div class="field">
+                <label for="p-glide">配置調整</label>
+                <select class="input" id="p-glide" name="glide" data-options="glidePaths"></select>
+              </div>
+              <div class="field">
+                <label for="p-rebalance">再平衡</label>
+                <select class="input" id="p-rebalance" name="rebalance" data-options="rebalanceModes"></select>
+                <span class="field__hint" data-rebalance-hint></span>
+              </div>
+              <div class="field">
+                <label for="p-distribution">報酬分布</label>
+                <select class="input" id="p-distribution" name="distribution" data-options="returnDistributions"></select>
+              </div>
+              <div class="field">
+                <label for="p-stress">壓力測試</label>
+                <select class="input" id="p-stress" name="stress" data-options="stressScenarios"></select>
+              </div>
+              <div class="field">
+                <label for="p-timing">發生時間</label>
+                <select class="input" id="p-timing" name="stressTiming" data-options="stressTimings"></select>
+              </div>
+            </div>
+            <p class="sublist__desc" data-stress-desc hidden></p>
+          </div>
+        </details>
+        <details class="sublist" data-list="withdraw">
+          <summary><span>中途提領</span><span class="badge" data-count hidden></span></summary>
+          <div class="sublist__body">
+            <p class="sublist__desc">在第幾個月底從投資中提領（例如第 36 個月底拿 50 萬買車），依當時各資產的比例賣出，之後少了這筆錢的複利。累計提領不可超過已投入的金額。</p>
+            <div class="sublist__rows" data-rows></div>
+            <button type="button" class="btn btn--outline" data-add>
+              <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新增提領
+            </button>
+          </div>
+        </details>
+      </div>
       <!-- 試算要模擬上千種配置，改成按按鈕才計算，打字時不會一直卡住 -->
       <div class="form-foot">
         <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
@@ -555,6 +601,7 @@
       <div class="tiles">
         <div class="tile"><span class="tile__label">目標金額</span><span class="tile__value" data-out="target">—</span></div>
         <div class="tile"><span class="tile__label">總投入金額</span><span class="tile__value" data-out="invested">—</span></div>
+        <div class="tile" data-withdrawn-tile hidden><span class="tile__label">中途提領</span><span class="tile__value" data-out="withdrawn">—</span></div>
         <div class="tile"><span class="tile__label">總報酬率</span><span class="tile__value" data-out="totalReturn">—</span></div>
         <div class="tile tile--primary"><span class="tile__label">需要的年化報酬率</span><span class="tile__value" data-out="requiredRate">—</span></div>
         <div class="tile"><span class="tile__label">風險最低的方案</span><span class="tile__value" data-out="tierName">—</span></div>
@@ -575,7 +622,7 @@
             </table>
           </div>
         </section>
-        <div class="options" data-options></div>
+        <div class="options" data-option-cards></div>
         <section data-portfolios>
           <h3 class="advice__sub">資產配置</h3>
           <p class="portfolio__summary" data-out="portfolioSummary"></p>
@@ -585,7 +632,7 @@
               <tbody data-portfolio-rows></tbody>
             </table>
           </div>
-          <p class="portfolio__rule">定存、公債、公司債、股票以每 5% 一級列出所有組合，股票再分 5 個等級（定存型、穩健型、穩健成長型、積極成長型、高波動型），依股票比例分類（25% 以下保守型、30%～45% 穩健型、50% 以上積極型）。限制：定存上限保守型 50%、穩健型 30%、積極型 20%；公司債上限保守型 20%、穩健型與積極型 30%；保守型只用定存型、穩健型股票，穩健型再加穩健成長型，積極型用穩健型以上四個等級。先以近似公式估計每種配置的達成機率，再把每型較好的幾十種以蒙地卡羅模擬 500 種市場走勢（每年報酬為對數常態分布，中位數為一般行情報酬率）；每一型挑出機率最高的配置，相差不到 2 個百分點時取波動較低的。一般行情報酬率：定存 1.75%、公債 4%、公司債 7%、股票 5%～12%（依等級）；預估波動：定存 0%、公債 4%、公司債 8%、股票 12%～40%。圓餅旁列出各資產的名稱與比例，滑過圓餅的每一段也會顯示。</p>
+          <p class="portfolio__rule">定存、公債、公司債、股票以每 5% 一級列出所有組合，股票再分 5 個等級（定存型、穩健型、穩健成長型、積極成長型、高波動型），依股票比例分類（25% 以下保守型、30%～45% 穩健型、50% 以上積極型）。限制：定存上限保守型 50%、穩健型 30%、積極型 20%；公司債上限保守型 20%、穩健型與積極型 30%；保守型只用定存型、穩健型股票，穩健型再加穩健成長型，積極型用穩健型以上四個等級；選擇年齡法則時，股票比例不超過 100 − 目前年齡。先以近似公式估計每種配置的達成機率，再把每型較好的幾十種以蒙地卡羅模擬 500 種市場走勢：四種資產每年的報酬各自為對數常態分布（中位數為一般行情報酬率，厚尾分布時改為 t 分布），以相關係數連動（公債與公司債 0.5、公債與股票 0.1、公司債與股票 0.5），每月投入、再平衡、調整比例與提領都逐段計算；每一型挑出機率最高的配置，相差不到 2 個百分點時取波動較低的。一般行情報酬率：定存 1.75%、公債 4%、公司債 7%、股票 5%～12%（依等級）；預估波動：定存 0%、公債 4%、公司債 8%、股票 12%～40%。圓餅旁列出各資產的名稱與比例，滑過圓餅的每一段也會顯示。</p>
         </section>
         <ul class="advice__list advice__list--warn" data-items="warnings"></ul>
         <div data-suggestions hidden>
@@ -593,6 +640,31 @@
           <ul class="advice__list" data-items="suggestions"></ul>
         </div>
       </article>
+
+      <div class="card scenario-card">
+        <div class="card__head"><h2>策略比較與壓力測試</h2><span class="card__meta">同樣的最佳配置，換一種調整方式或遇上壞行情</span></div>
+        <p class="scenario__settings" data-out="settingsText"></p>
+        <h3 class="advice__sub">調整方式比較</h3>
+        <p class="scenario__summary" data-out="strategySummary"></p>
+        <div class="table-wrap table-wrap--auto spread" tabindex="0" aria-label="調整方式比較，可捲動">
+          <table class="data-table data-table--summary data-table--scenario">
+            <thead data-strategy-head></thead>
+            <tbody data-strategy-rows></tbody>
+          </table>
+        </div>
+        <p class="portfolio__rule">每一格是該類型的最佳配置改用這種方式的模擬結果：達成機率、期滿金額中位數與悲觀情況（最差 10%）。固定比例：不再平衡時漲多的資產比例會越來越高；每年再平衡會賣出漲多的、買回跌多的。接近期滿逐年降低股票：期滿前 5 年起把股票逐年移到公債，最後一年降到一半。年齡法則：股票比例不超過 100 − 當年年齡。</p>
+        <section data-stress hidden>
+          <h3 class="advice__sub">壓力測試</h3>
+          <p class="scenario__summary" data-out="stressText"></p>
+          <div class="table-wrap table-wrap--auto spread" tabindex="0" aria-label="壓力測試，可捲動">
+            <table class="data-table data-table--summary data-table--scenario">
+              <thead><tr><th scope="col">類型</th><th scope="col">達成機率</th><th scope="col">期滿金額中位數</th><th scope="col">悲觀（最差 10%）</th></tr></thead>
+              <tbody data-stress-rows></tbody>
+            </table>
+          </div>
+          <p class="portfolio__rule">情境年份的報酬換成情境數值（長期盤整只降低一般行情、仍有波動），其他年份與一般模擬相同的 500 種走勢，箭頭左邊是一般情況、右邊是壓力情境。</p>
+        </section>
+      </div>
 
       <div class="card chart-card">
         <div class="card__head"><h2>累積財富走勢</h2><span class="card__meta">三種配置的最佳配置，以一般行情計算</span></div>
@@ -604,13 +676,14 @@
         <div class="chart-legend">
           <span><i class="legend-range"></i>悲觀（最差 10%）～樂觀（最好 10%）</span>
           <span><i class="legend-median"></i>中位數</span>
+          <span data-stress-legend hidden><i class="legend-range legend-range--stress"></i>壓力情境</span>
           <span><i class="legend-line legend-line--target"></i>目標金額</span>
         </div>
         <div class="chart" data-range-chart></div>
       </div>
       <div class="allocation-years" data-allocation-years></div>
-      <p class="note">逐年試算：本金與每月投資依配置比例分到定存、公債、公司債、股票，之後各自以一般行情報酬率（定存 1.75%、公債 4%、公司債 7%、股票依等級 5%～12%）逐月複利，不做再平衡；「目標進度」是以需要的年化報酬率計算、剛好在期滿達標的金額。實際報酬每年會上下波動，請同時參考達成機率。</p>
-      <p class="note">本金在第 1 個月初投入，每月投資在每月月初投入；需要的年化報酬率是讓期滿金額剛好等於「總投入 + 期望獲利」的報酬率（逐月複利）。各類標的的「一般行情」與「行情好」報酬率都是假設值，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
+      <p class="note">逐年試算：本金與每月投資依當年的配置比例分到定存、公債、公司債、股票，各自以一般行情報酬率（定存 1.75%、公債 4%、公司債 7%、股票依等級 5%～12%）逐月複利，並依模擬設定再平衡、調整股票比例與提領；各資產的「獲利」是該資產累積賺到的金額，再平衡只搬動金額、不改變獲利。「目標進度」是以需要的年化報酬率計算、剛好在期滿達標的金額。實際報酬每年會上下波動，請同時參考達成機率。</p>
+      <p class="note">本金在第 1 個月初投入，每月投資在每月月初投入，中途提領在該月月底；需要的年化報酬率是讓期滿金額剛好等於「總投入 − 中途提領 + 期望獲利」的報酬率（逐月複利）。各類標的的「一般行情」與「行情好」報酬率都是假設值，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
     </div>
   </section>
 </main>
@@ -624,6 +697,24 @@
   <p class="update-bar__text">網站已更新到新版本，重新整理後就會使用最新內容。</p>
   <button type="button" class="btn btn--primary" data-update-reload>重新整理</button>
 </div>
+
+<template id="tpl-withdraw-row">
+  <div class="period-row">
+    <div class="field">
+      <label data-for="period">第幾個月底</label>
+      <div class="input-wrap"><input class="input" name="withdrawMonth" inputmode="numeric" data-kind="period"><span class="input-affix">個月</span></div>
+      <span class="field__hint" data-hint></span>
+    </div>
+    <div class="field">
+      <label data-for="value">提領金額</label>
+      <div class="input-wrap"><input class="input" name="withdrawAmount" data-kind="money" inputmode="numeric"><span class="input-affix">元</span></div>
+      <span class="field__hint" data-hint></span>
+    </div>
+    <button type="button" class="icon-btn" data-remove aria-label="刪除這筆提領">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+</template>
 
 <template id="tpl-rate-row">
   <div class="period-row">

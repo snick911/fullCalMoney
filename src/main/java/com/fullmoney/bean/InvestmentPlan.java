@@ -21,16 +21,18 @@ public class InvestmentPlan {
 		INFEASIBLE
 	}
 
-	/** 逐年試算的一列：第 months 個月底的累積投入與金額 */
+	/** 逐年試算的一列：第 months 個月底的累積投入、累積提領與金額 */
 	public static final class Row {
 
 		private final int months;
 		private final BigDecimal invested;
+		private final BigDecimal withdrawn;
 		private final BigDecimal balance;
 
-		public Row(int months, BigDecimal invested, BigDecimal balance) {
+		public Row(int months, BigDecimal invested, BigDecimal withdrawn, BigDecimal balance) {
 			this.months = months;
 			this.invested = invested;
+			this.withdrawn = withdrawn;
 			this.balance = balance;
 		}
 
@@ -42,8 +44,82 @@ public class InvestmentPlan {
 			return invested;
 		}
 
+		public BigDecimal getWithdrawn() {
+			return withdrawn;
+		}
+
 		public BigDecimal getBalance() {
 			return balance;
+		}
+	}
+
+	/** 蒙地卡羅模擬的結果摘要：達成機率與期滿金額的第 10、50、90 百分位 */
+	public static final class Outcome {
+
+		private final BigDecimal probability;
+		private final BigDecimal pessimistic;
+		private final BigDecimal median;
+		private final BigDecimal optimistic;
+
+		public Outcome(BigDecimal probability, BigDecimal pessimistic, BigDecimal median, BigDecimal optimistic) {
+			this.probability = probability;
+			this.pessimistic = pessimistic;
+			this.median = median;
+			this.optimistic = optimistic;
+		}
+
+		/** 達成機率 ex. 0.62 */
+		public BigDecimal getProbability() {
+			return probability;
+		}
+
+		/** 期滿金額的第 10 百分位（悲觀） */
+		public BigDecimal getPessimistic() {
+			return pessimistic;
+		}
+
+		public BigDecimal getMedian() {
+			return median;
+		}
+
+		/** 期滿金額的第 90 百分位（樂觀） */
+		public BigDecimal getOptimistic() {
+			return optimistic;
+		}
+	}
+
+	/** 策略比較的一列：同樣的最佳配置，改用另一種配置調整與再平衡方式 */
+	public static final class Strategy {
+
+		private final GlidePath glidePath;
+		private final RebalanceMode rebalance;
+		private final boolean selected;
+		private final List<Outcome> outcomes;
+
+		public Strategy(GlidePath glidePath, RebalanceMode rebalance, boolean selected, List<Outcome> outcomes) {
+			this.glidePath = glidePath;
+			this.rebalance = rebalance;
+			this.selected = selected;
+			this.outcomes = outcomes;
+		}
+
+		public GlidePath getGlidePath() {
+			return glidePath;
+		}
+
+		/** 固定比例時的再平衡方式；逐年調整比例時為 null（每年依新比例調整） */
+		public RebalanceMode getRebalance() {
+			return rebalance;
+		}
+
+		/** 是否為目前的設定 */
+		public boolean isSelected() {
+			return selected;
+		}
+
+		/** 與 portfolios 順序相同 */
+		public List<Outcome> getOutcomes() {
+			return outcomes;
 		}
 	}
 
@@ -104,34 +180,48 @@ public class InvestmentPlan {
 	}
 
 	/**
-	 * 資產配置的逐年試算一列：第 months 個月底，定存／公債／公司債／股票各自的累積投入與金額
+	 * 資產配置的逐年試算一列：第 months 個月底，定存／公債／公司債／股票各自的金額與累積獲利
 	 *
-	 * <p>本金與每月投資依配置比例分到四種資產，之後各自以一般行情報酬率逐月複利，不做再平衡。</p>
+	 * <p>本金與每月投資依當年比例分到四種資產，各自以一般行情報酬率逐月複利，並依設定再平衡、調整比例與提領。</p>
 	 */
 	public static final class AllocationRow {
 
 		private final int months;
-		private final BigDecimal[] invested;
+		private final BigDecimal invested;
+		private final BigDecimal withdrawn;
 		private final BigDecimal[] values;
+		private final BigDecimal[] gains;
 
-		public AllocationRow(int months, BigDecimal[] invested, BigDecimal[] values) {
+		public AllocationRow(int months, BigDecimal invested, BigDecimal withdrawn, BigDecimal[] values, BigDecimal[] gains) {
 			this.months = months;
 			this.invested = invested;
+			this.withdrawn = withdrawn;
 			this.values = values;
+			this.gains = gains;
 		}
 
 		public int getMonths() {
 			return months;
 		}
 
-		/** 定存、公債、公司債、股票的累積投入 */
-		public BigDecimal[] getInvested() {
+		/** 累積投入 */
+		public BigDecimal getInvested() {
 			return invested;
+		}
+
+		/** 累積提領 */
+		public BigDecimal getWithdrawn() {
+			return withdrawn;
 		}
 
 		/** 定存、公債、公司債、股票的金額 */
 		public BigDecimal[] getValues() {
 			return values;
+		}
+
+		/** 定存、公債、公司債、股票各自累積賺到的獲利 */
+		public BigDecimal[] getGains() {
+			return gains;
 		}
 	}
 
@@ -143,29 +233,31 @@ public class InvestmentPlan {
 		private final InvestmentTier stockLevel;
 		private final BigDecimal typicalRate;
 		private final BigDecimal volatility;
-		private final BigDecimal probability;
-		private final BigDecimal pessimistic;
-		private final BigDecimal median;
-		private final BigDecimal optimistic;
+		private final Outcome outcome;
+		private final Outcome stressOutcome;
+		private final BigDecimal endStock;
 		private final boolean horizonOk;
 		private final int candidates;
 		private final int reachable;
 		private final int simulated;
 		private final List<AllocationRow> rows;
 
-		public Portfolio(Candidate best, BigDecimal typicalRate, BigDecimal volatility, BigDecimal[] outcomes, boolean horizonOk, int candidates,
-				int reachable, int simulated, List<AllocationRow> rows) {
+		/**
+		 * @param stressOutcome 壓力情境下的結果，沒有做壓力測試時為 null
+		 * @param endStock 最後一年的股票比例（%）
+		 */
+		public Portfolio(Candidate best, BigDecimal typicalRate, BigDecimal volatility, Outcome outcome, Outcome stressOutcome, BigDecimal endStock,
+				boolean horizonOk, int candidates, int reachable, int simulated, List<AllocationRow> rows) {
 			this.profile = best.getProfile();
 			this.weights = best.getWeights();
 			this.stockLevel = best.getStockLevel();
-			this.probability = BigDecimal.valueOf(best.getProbability());
+			this.outcome = outcome;
+			this.stressOutcome = stressOutcome;
+			this.endStock = endStock;
 			this.simulated = simulated;
 			this.rows = rows;
 			this.typicalRate = typicalRate;
 			this.volatility = volatility;
-			this.pessimistic = outcomes[0];
-			this.median = outcomes[1];
-			this.optimistic = outcomes[2];
 			this.horizonOk = horizonOk;
 			this.candidates = candidates;
 			this.reachable = reachable;
@@ -175,29 +267,43 @@ public class InvestmentPlan {
 			return profile;
 		}
 
-		/** 預估年波動（標準差）ex. 0.075 */
+		/** 預估年波動（標準差，以起始比例計算）ex. 0.075 */
 		public BigDecimal getVolatility() {
 			return volatility;
 		}
 
+		public Outcome getOutcome() {
+			return outcome;
+		}
+
+		/** 壓力情境下的結果，沒有做壓力測試時為 null */
+		public Outcome getStressOutcome() {
+			return stressOutcome;
+		}
+
+		/** 最後一年的股票比例（%），固定比例時與起始相同 */
+		public BigDecimal getEndStock() {
+			return endStock;
+		}
+
 		/** 模擬的達成機率 ex. 0.62 */
 		public BigDecimal getProbability() {
-			return probability;
+			return outcome.getProbability();
 		}
 
 		/** 期滿金額的第 10 百分位（悲觀） */
 		public BigDecimal getPessimistic() {
-			return pessimistic;
+			return outcome.getPessimistic();
 		}
 
 		/** 期滿金額的中位數 */
 		public BigDecimal getMedian() {
-			return median;
+			return outcome.getMedian();
 		}
 
 		/** 期滿金額的第 90 百分位（樂觀） */
 		public BigDecimal getOptimistic() {
-			return optimistic;
+			return outcome.getOptimistic();
 		}
 
 		/** 此類型共評估幾種配置 */
@@ -215,7 +321,7 @@ public class InvestmentPlan {
 			return simulated;
 		}
 
-		/** 逐年試算：各資產的累積投入與金額（一般行情） */
+		/** 逐年試算：各資產的金額與累積獲利（一般行情） */
 		public List<AllocationRow> getRows() {
 			return rows;
 		}
@@ -328,6 +434,12 @@ public class InvestmentPlan {
 		}
 	}
 
+	private PlanSettings settings;
+	private BigDecimal withdrawn;
+	private List<Strategy> strategies;
+	private int stressFrom;
+	private int stressYears;
+	private List<AllocationProfile> unavailableProfiles;
 	private BigDecimal principal;
 	private BigDecimal monthly;
 	private BigDecimal invested;
@@ -351,6 +463,60 @@ public class InvestmentPlan {
 	private BigDecimal benchmarkPrincipal;
 	private BigDecimal benchmarkMonthly;
 	private BigDecimal benchmarkProfit;
+
+	/** 模擬設定 */
+	public PlanSettings getSettings() {
+		return settings;
+	}
+
+	public void setSettings(PlanSettings settings) {
+		this.settings = settings;
+	}
+
+	/** 中途提領合計 */
+	public BigDecimal getWithdrawn() {
+		return withdrawn;
+	}
+
+	public void setWithdrawn(BigDecimal withdrawn) {
+		this.withdrawn = withdrawn;
+	}
+
+	/** 同樣的最佳配置在各種配置調整與再平衡方式下的結果 */
+	public List<Strategy> getStrategies() {
+		return strategies;
+	}
+
+	public void setStrategies(List<Strategy> strategies) {
+		this.strategies = strategies;
+	}
+
+	/** 壓力情境從第幾年開始（0 起算） */
+	public int getStressFrom() {
+		return stressFrom;
+	}
+
+	public void setStressFrom(int stressFrom) {
+		this.stressFrom = stressFrom;
+	}
+
+	/** 壓力情境持續幾年，沒有做壓力測試時為 0 */
+	public int getStressYears() {
+		return stressYears;
+	}
+
+	public void setStressYears(int stressYears) {
+		this.stressYears = stressYears;
+	}
+
+	/** 依年齡法則沒有任何可用配置的類型 */
+	public List<AllocationProfile> getUnavailableProfiles() {
+		return unavailableProfiles;
+	}
+
+	public void setUnavailableProfiles(List<AllocationProfile> unavailableProfiles) {
+		this.unavailableProfiles = unavailableProfiles;
+	}
 
 	public BigDecimal getPrincipal() {
 		return principal;
@@ -386,7 +552,7 @@ public class InvestmentPlan {
 		this.profit = profit;
 	}
 
-	/** 目標金額 = 總投入 + 期望獲利 */
+	/** 目標金額（期滿時要有的金額）= 總投入 − 中途提領 + 期望獲利 */
 	public BigDecimal getTarget() {
 		return target;
 	}

@@ -630,6 +630,25 @@ select.input option { background: var(--surface); color: var(--fg); }
 .legend-area { display: inline-block; flex: none; width: .9rem; height: .65rem; border-radius: 2px; background: color-mix(in srgb, var(--muted) 25%, transparent); }
 .legend-range { display: inline-block; flex: none; width: 1.4rem; height: .55rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 45%, transparent); }
 .legend-median { display: inline-block; flex: none; width: .6rem; height: .6rem; border-radius: 50%; background: var(--muted); }
+/* 壓力情境：同色細虛線區間、空心中位數 */
+.chart .chart__range--stress { stroke-width: 3; stroke-opacity: .9; stroke-dasharray: 4 3; stroke-linecap: butt; }
+.chart .chart__median--stress { fill: var(--surface); stroke: var(--profile-color); stroke-width: 2; }
+.legend-range.legend-range--stress { height: 0; border-top: 3px dashed var(--muted); border-radius: 0; background: none; }
+/* 中途提領：提領月份的細虛線 */
+.chart .chart__event { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .chart__event-label { fill: var(--muted); font-size: 11px; font-weight: 400; }
+.legend-event { display: inline-block; flex: none; width: 0; height: .85rem; border-left: 1px dashed var(--fg); }
+
+/* 策略比較與壓力測試 */
+.scenario__settings { margin: 0; color: var(--muted); font-size: .875rem; }
+.scenario__summary { margin: .35rem 0 .6rem; }
+.data-table--scenario .portfolio__chance { color: var(--fg); }
+.data-table--scenario .portfolio__chance.is-best { color: var(--accent); }
+.data-table--scenario tbody th .option__tag { margin-left: .4rem; }
+.data-table--scenario th .profile-pill { font-size: .875rem; }
+
+/* 模擬設定：下拉選單的文字較長，欄位放寬 */
+.fields.fields--settings { grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); }
 
 /* 資產配置圓餅（甜甜圈）：每段之間留 2px 底色間隔，旁邊列出名稱與比例 */
 .allocation-pie { display: inline-flex; align-items: center; gap: .6rem; }

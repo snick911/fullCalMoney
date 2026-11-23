@@ -10,6 +10,8 @@
   const FONTS = ['s', 'm', 'l', 'xl'];
   const MONTHS_PER_YEAR = 12;
   const MAX_PERIOD = 600;
+  /** 期數提示的上限：投資計畫最長 100 年 */
+  const MAX_HINT_PERIOD = 1200;
   const FIRST_NEW_PERIOD = 13;
   const NEW_PERIOD_STEP = 12;
   const DEFAULT_PREPAYMENT = '100,000';
@@ -66,7 +68,7 @@
       return years ? `${years} 年 ${months} 個月` : `${months} 個月`;
     },
     periodHint(period) {
-      if (!Number.isInteger(period) || period < 1 || period > MAX_PERIOD) return '';
+      if (!Number.isInteger(period) || period < 1 || period > MAX_HINT_PERIOD) return '';
       return `第 ${Math.floor((period - 1) / MONTHS_PER_YEAR) + 1} 年第 ${((period - 1) % MONTHS_PER_YEAR) + 1} 個月`;
     },
     /** 金額換成「萬、億」，方便確認位數 */
@@ -291,6 +293,12 @@
       this.timer = setTimeout(() => this.run(), DEBOUNCE_MS);
     }
 
+    /** 清單新增或刪除一列：自動模式立即重算，手動模式只提示按按鈕 */
+    edited() {
+      if (this.manual) this.changed();
+      else this.run();
+    }
+
     /** 計算中：按鈕顯示「試算中…」並停用，避免重複按 */
     setBusy(busy) {
       if (!this.runButton) return;
@@ -451,6 +459,8 @@
 
     setOut(scope, 'target', twd(d.target));
     setOut(scope, 'invested', twd(d.invested));
+    setOut(scope, 'withdrawn', twd(d.withdrawn));
+    $('[data-withdrawn-tile]', scope).hidden = !(d.withdrawn > 0);
     setOut(scope, 'totalReturn', planRate(d.totalReturn));
     setOut(scope, 'requiredRate', planRate(d.requiredRate));
     setOut(scope, 'tierName', d.tierName);
@@ -471,7 +481,7 @@
         + `<td>${c.rate == null ? '沒有投入資金' : planRate(c.rate)}</td><td>${c.tierName == null ? NO_VALUE : escapeHtml(c.tierName)}</td></tr>`).join('');
     }
 
-    $('[data-options]', scope).innerHTML = d.options.map((o) => optionCard(o, twd, d.tier)).join('');
+    $('[data-option-cards]', scope).innerHTML = d.options.map((o) => optionCard(o, twd, d.tier)).join('');
 
     //資產配置：保守型、穩健型、積極型各自的最佳配置（每 5% 一級搜尋、蒙地卡羅模擬）
     setOut(scope, 'portfolioSummary', d.portfolioSummary);
@@ -483,7 +493,7 @@
         + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">建議 ${escapeHtml(p.horizon)}</span>`);
       return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${profilePill(p)}${badge}`
         + `<span class="portfolio__count">${p.candidates.toLocaleString('zh-TW')} 種中約 ${p.reachable.toLocaleString('zh-TW')} 種機率過半</span></th>`
-        + `<td>${allocationPie(p, 48)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
+        + `<td>${allocationPie(p, 48)}${endStockNote(p)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
         + `<td><span class="portfolio__chance">${chancePercent(p.probability)}</span><span class="portfolio__tags">${tags}</span></td>`
         + `<td>${twd(p.median)}<span class="portfolio__count">${twd(p.pessimistic)}～${twd(p.optimistic)}</span></td></tr>`;
     }).join('');
@@ -492,9 +502,75 @@
     $('[data-items="suggestions"]', scope).innerHTML = d.suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
     $('[data-suggestions]', scope).hidden = d.suggestions.length === 0;
 
+    renderScenarios(d, scope);
+
     //三種配置的逐年試算：各資產金額與獲利，旁邊對照需要的報酬率下的目標進度（d.rows 的金額）
     $('[data-allocation-years]', scope).innerHTML = d.portfolios.map((p) => allocationYears(p, d.rows, twd)).join('');
     renderPlanCharts(d, scope);
+  }
+
+  /** 逐年降低股票比例時，標示最後一年的股票比例 */
+  const stockPercent = (n) => `${Number(n).toLocaleString('zh-TW', { maximumFractionDigits: 1 })}%`;
+  const endStockNote = (p) => (Number(p.endStock) === p.weights[3] ? ''
+    : `<span class="portfolio__count">股票逐年降低，期滿時 ${stockPercent(p.endStock)}</span>`);
+
+  /**
+   * 策略比較與壓力測試：同樣的最佳配置改用 5 種調整方式的結果（每欄機率最高者標色），
+   * 以及壓力情境下的達成機率與金額（箭頭左邊一般情況、右邊壓力情境）
+   */
+  function renderScenarios(d, scope) {
+    const twd = (n) => fmt.twd(n, d.decimals);
+    setOut(scope, 'settingsText', d.settings.text);
+    setOut(scope, 'strategySummary', d.strategySummary);
+    $('[data-strategy-head]', scope).innerHTML = '<tr><th scope="col">調整方式</th>'
+      + `${d.portfolios.map((p) => `<th scope="col">${profilePill(p)}</th>`).join('')}</tr>`;
+    const best = d.portfolios.map((p, i) => Math.max(...d.strategies.map((s) => s.outcomes[i].probability)));
+    $('[data-strategy-rows]', scope).innerHTML = d.strategies.map((s) => {
+      const tag = s.selected ? '<span class="option__tag">目前設定</span>' : '';
+      const cells = s.outcomes.map((o, i) => `<td><span class="portfolio__chance${o.probability >= best[i] ? ' is-best' : ''}">${chancePercent(o.probability)}</span>`
+        + `<span class="portfolio__count">中位數 ${twd(o.median)}</span><span class="portfolio__count">悲觀 ${twd(o.pessimistic)}</span></td>`).join('');
+      return `<tr${s.selected ? ' class="is-recommended"' : ''}><th scope="row">${escapeHtml(s.name)}${tag}</th>${cells}</tr>`;
+    }).join('');
+
+    const stress = $('[data-stress]', scope);
+    stress.hidden = !d.stress;
+    $('[data-stress-legend]', scope).hidden = !d.stress;
+    if (!d.stress) return;
+    setOut(scope, 'stressText', d.stress.text);
+    const change = (from, to, format) => `${format(from)} → <span class="${to < from ? 'is-down' : 'is-accent'}">${format(to)}</span>`;
+    $('[data-stress-rows]', scope).innerHTML = d.portfolios.map((p) => `<tr><th scope="row">${profilePill(p)}</th>`
+      + `<td>${change(p.probability, p.stress.probability, chancePercent)}</td><td>${change(p.median, p.stress.median, twd)}</td>`
+      + `<td>${change(p.pessimistic, p.stress.pessimistic, twd)}</td></tr>`).join('');
+  }
+
+  /** 投資計畫：按按鈕才試算；中途提領清單；配置調整與壓力測試選項的說明 */
+  function initPlan(meta) {
+    const section = $('#page-plan');
+    const glide = $('#p-glide');
+    const stress = $('#p-stress');
+    const timingField = $('#p-timing').closest('.field');
+    const rebalanceHint = $('[data-rebalance-hint]', section);
+    const stressDesc = $('[data-stress-desc]', section);
+    const descriptions = new Map((meta.stressScenarios || []).map((s) => [s.code, s.description]));
+    const sync = () => {
+      rebalanceHint.textContent = glide.value && glide.value !== 'FIXED' ? '逐年調整比例時，每年依新比例調整' : '';
+      const description = descriptions.get(stress.value);
+      stressDesc.textContent = description ? `${stress.selectedOptions[0].text}：${description}。` : '';
+      stressDesc.hidden = !description;
+      timingField.hidden = !description;
+    };
+    const plan = new Calculator('plan', {
+      render: renderPlan,
+      manual: true,
+      onReset: () => { withdrawList.clear(); sync(); },
+      beforeRestore: (state) => withdrawList.restore(countField(state, 'withdrawMonth')),
+      afterRestore: sync,
+    });
+    const withdrawList = initPeriodList(plan, 'withdraw', 'tpl-withdraw-row', () => '500,000', 36);
+    glide.addEventListener('change', sync);
+    stress.addEventListener('change', sync);
+    sync();
+    return plan;
   }
 
   /* ---------- 投資計畫圖表：手寫 SVG（網站的 CSP 只允許同源腳本，不載入外部圖表函式庫） ---------- */
@@ -600,6 +676,10 @@
     const area = `<polygon class="chart__invested" points="${x(0)},${y(0)} ${points(invested)} ${x(d.months)},${y(0)}"></polygon>`;
     const lines = series.map((s) => `<polyline class="chart__line profile--${s.code}" points="${points(s.values)}"></polyline>`).join('')
       + `<polyline class="chart__target" points="${points(target)}"></polyline>`;
+    //中途提領：在提領月份畫一條細虛線
+    const withdrawn = [0, ...d.rows.map((r) => r[5] || 0)];
+    const events = (d.settings.withdrawals || []).map(([month]) => `<line class="chart__event" x1="${x(month)}" x2="${x(month)}" y1="${m.top}" y2="${m.top + plotH}"></line>`
+      + `<text class="chart__label chart__event-label" x="${x(month)}" y="${m.top + 10}" text-anchor="middle">提領</text>`).join('');
 
     //線尾標籤：類型名稱用文字色，旁邊的圓點才是類型色
     const last = months.length - 1;
@@ -614,7 +694,7 @@
       + `<text class="chart__label" x="${endX + 12}" y="${e.labelY + 4}">${e.text}</text>`).join('');
 
     box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="累積財富走勢圖，數值見下方逐年試算表">`
-      + `${grid}${area}${axis}${lines}${endLabels}`
+      + `${grid}${area}${axis}${events}${lines}${endLabels}`
       + `<line class="chart__cross" data-cross x1="0" x2="0" y1="${m.top}" y2="${m.top + plotH}" visibility="hidden"></line>`
       + series.map((s) => `<circle class="chart__dot profile--${s.code}" data-hover="${s.code}" r="4" visibility="hidden"></circle>`).join('')
       + `<rect class="chart__hit" x="${m.left}" y="${m.top}" width="${plotW}" height="${plotH}"></rect></svg>`;
@@ -641,7 +721,8 @@
       });
       const rows = [...series.map((s) => ({ value: twd(s.values[index]), label: s.name, key: `legend-line profile--${s.code}` })),
         { value: twd(target[index]), label: '目標進度', key: 'legend-line legend-line--target' },
-        { value: twd(invested[index]), label: '累積投入', key: 'legend-area' }]
+        { value: twd(invested[index]), label: '累積投入', key: 'legend-area' },
+        ...(withdrawn[index] > 0 ? [{ value: twd(withdrawn[index]), label: '累積提領', key: 'legend-event' }] : [])]
         .sort((a, b) => parseNumber(b.value.replace('$', '')) - parseNumber(a.value.replace('$', '')));
       tip.show(index === 0 ? '開始' : fmt.term(months[index]), rows, cx * (rect.width / width), m.top);
     };
@@ -663,11 +744,14 @@
   function rangeChart(box, d) {
     const width = Math.max(box.clientWidth, 280);
     const narrow = width < 480;
-    const rowH = 48;
+    //有壓力測試時，每列多一條虛線區間（同一組走勢、情境年份換成情境報酬）
+    const stressed = d.portfolios.some((p) => p.stress);
+    const rowH = stressed ? 66 : 48;
     const m = { top: 24, right: 18, bottom: 26, left: narrow ? 58 : 70 };
     const height = m.top + rowH * d.portfolios.length + m.bottom;
     const plotW = width - m.left - m.right;
-    const values = d.portfolios.flatMap((p) => [p.pessimistic, p.optimistic]).concat(d.target);
+    const values = d.portfolios.flatMap((p) => [p.pessimistic, p.optimistic, ...(p.stress ? [p.stress.pessimistic, p.stress.optimistic] : [])])
+      .concat(d.target);
     const low = Math.min(...values);
     const high = Math.max(...values);
     const pad = (high - low) * 0.06 || high * 0.05 || 1;
@@ -680,15 +764,19 @@
     const grid = ticks.map((v) => `<line class="chart__grid" x1="${x(v)}" x2="${x(v)}" y1="${m.top}" y2="${height - m.bottom}"></line>`
       + `<text x="${x(v)}" y="${height - 8}" text-anchor="middle">${compactMoney(v)}</text>`).join('');
     const rows = d.portfolios.map((p, i) => {
-      const cy = m.top + rowH * i + rowH / 2;
+      const middle = m.top + rowH * i + rowH / 2;
+      const cy = stressed ? middle - 4 : middle;
+      const sy = middle + 16;
+      const stress = p.stress ? `<line class="chart__range chart__range--stress" x1="${x(p.stress.pessimistic)}" x2="${x(p.stress.optimistic)}" y1="${sy}" y2="${sy}"></line>`
+        + `<circle class="chart__median chart__median--stress" cx="${x(p.stress.median)}" cy="${sy}" r="4"></circle>` : '';
       return `<g class="profile--${p.code}">`
-        + `<rect class="chart__row-hit" data-row="${i}" x="0" y="${cy - rowH / 2}" width="${width}" height="${rowH}"></rect>`
+        + `<rect class="chart__row-hit" data-row="${i}" x="0" y="${middle - rowH / 2}" width="${width}" height="${rowH}"></rect>`
         + `<circle class="chart__dot" cx="10" cy="${cy}" r="4"></circle>`
         + `<text class="chart__label" x="20" y="${cy + 4}">${escapeHtml(p.name)}</text>`
         + `<line class="chart__range" x1="${x(p.pessimistic)}" x2="${x(p.optimistic)}" y1="${cy}" y2="${cy}"></line>`
         + `<circle class="chart__median" cx="${x(p.median)}" cy="${cy}" r="6"></circle>`
         + `<text class="chart__value" x="${x(p.median)}" y="${cy - 11}" text-anchor="middle">${compactMoney(p.median)}</text>`
-        + '</g>';
+        + `${stress}</g>`;
     }).join('');
     const targetX = x(d.target);
     const target = `<line class="chart__target" x1="${targetX}" x2="${targetX}" y1="${m.top - 4}" y2="${height - m.bottom}"></line>`
@@ -705,12 +793,19 @@
         const rect = svg.getBoundingClientRect();
         const scale = rect.width / width;
         const key = `legend-line profile--${p.code}`;
-        tip.show(`${p.name}・達成機率 ${chancePercent(p.probability)}`, [
+        const stressKey = 'legend-range legend-range--stress';
+        const title = `${p.name}，達成機率 ${chancePercent(p.probability)}`
+          + (p.stress ? `（壓力情境 ${chancePercent(p.stress.probability)}）` : '');
+        tip.show(title, [
           { value: twd(p.optimistic), label: '樂觀（最好 10%）', key },
           { value: twd(p.median), label: '中位數', key },
           { value: twd(p.pessimistic), label: '悲觀（最差 10%）', key },
+          ...(p.stress ? [
+            { value: twd(p.stress.median), label: '壓力情境中位數', key: stressKey },
+            { value: twd(p.stress.pessimistic), label: '壓力情境悲觀', key: stressKey },
+          ] : []),
           { value: twd(d.target), label: '目標', key: 'legend-line legend-line--target' },
-        ], x(p.optimistic) * scale, (m.top + rowH * Number(hit.dataset.row)) * scale);
+        ], Math.max(x(p.optimistic), p.stress ? x(p.stress.optimistic) : 0) * scale, (m.top + rowH * Number(hit.dataset.row)) * scale);
       };
       hit.addEventListener('pointerenter', show);
       hit.addEventListener('pointerdown', show);
@@ -724,7 +819,8 @@
     lastPlan = { d, scope };
     $('[data-growth-legend]', scope).innerHTML = d.portfolios.map((p) =>
       `<span class="profile--${escapeHtml(p.code)}"><i class="legend-line"></i>${escapeHtml(p.name)}</span>`).join('')
-      + '<span><i class="legend-line legend-line--target"></i>目標進度</span><span><i class="legend-area"></i>累積投入</span>';
+      + '<span><i class="legend-line legend-line--target"></i>目標進度</span><span><i class="legend-area"></i>累積投入</span>'
+      + (d.settings.withdrawals.length ? '<span><i class="legend-event"></i>中途提領</span>' : '');
     growthChart($('[data-growth-chart]', scope), d);
     rangeChart($('[data-range-chart]', scope), d);
   }
@@ -766,17 +862,21 @@
   }
 
   /**
-   * 一種配置的逐年試算表；p.rows 每列為 [月, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的獲利（4 欄）, 總金額, 累積獲利]
+   * 一種配置的逐年試算表；p.rows 每列為 [月, 累積投入, 定存、公債、公司債、股票的金額（4 欄）, 四者的累積獲利（4 欄）, 總金額, 累積獲利, 累積提領]
    */
   function allocationYears(p, targetRows, twd) {
     const count = ASSET_NAMES.length;
-    const asset = (r, i) => (p.weights[i] === 0 ? `<td class="is-muted">${NO_VALUE}</td>`
+    //整個期間都沒有的資產顯示「—」（逐年降低股票時，公債可能從 0 開始增加）
+    const unused = ASSET_NAMES.map((name, i) => p.rows.every((r) => r[2 + i] === 0 && r[2 + count + i] === 0));
+    const withdrawals = p.rows.some((r) => r[4 + count * 2] > 0);
+    const asset = (r, i) => (unused[i] ? `<td class="is-muted">${NO_VALUE}</td>`
       : `<td>${twd(r[2 + i])}<span class="asset-gain">獲利 ${twd(r[2 + count + i])}</span></td>`);
     const body = p.rows.map((r, i) => {
       const total = r[2 + count * 2];
       const target = targetRows[i] ? targetRows[i][2] : null;
       const ahead = target == null || total >= target;
-      return `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td>${ASSET_NAMES.map((name, j) => asset(r, j)).join('')}`
+      return `<tr><td>${fmt.term(r[0])}</td><td>${twd(r[1])}</td>${withdrawals ? `<td>${twd(r[4 + count * 2])}</td>` : ''}`
+        + `${ASSET_NAMES.map((name, j) => asset(r, j)).join('')}`
         + `<td class="${ahead ? 'is-accent' : 'is-down'}">${twd(total)}</td><td>${twd(r[3 + count * 2])}</td>`
         + `<td>${target == null ? NO_VALUE : twd(target)}</td></tr>`;
     }).join('');
@@ -786,9 +886,11 @@
       + (i === 3 && p.stockLevelName ? `<span class="asset-gain">${escapeHtml(p.stockLevelName)}</span>` : '') + '</th>';
     return `<div class="card card--flush profile-card profile--${escapeHtml(p.code)}">`
       + `<div class="card__head"><h2>${profilePill(p)} 逐年試算${badge}</h2>`
-      + `<span class="profile-card__summary">${allocationPie(p, 56)}<span class="card__meta">達成機率 ${chancePercent(p.probability)}</span></span></div>`
+      + `<span class="profile-card__summary">${allocationPie(p, 56)}<span class="card__meta">達成機率 ${chancePercent(p.probability)}`
+      + `${Number(p.endStock) === p.weights[3] ? '' : `，股票逐年降到 ${stockPercent(p.endStock)}`}</span></span></div>`
       + `<div class="table-wrap" tabindex="0" aria-label="${escapeHtml(p.name)}逐年試算，可捲動"><table class="data-table">`
-      + `<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th>${ASSET_NAMES.map((name, i) => head(i)).join('')}`
+      + `<thead><tr><th scope="col">期間</th><th scope="col">累積投入</th>${withdrawals ? '<th scope="col">累積提領</th>' : ''}`
+      + `${ASSET_NAMES.map((name, i) => head(i)).join('')}`
       + '<th scope="col">總金額</th><th scope="col">累積獲利</th><th scope="col">目標進度</th></tr></thead>'
       + `<tbody>${body}</tbody></table></div></div>`;
   }
@@ -796,8 +898,8 @@
   /* ---------- 房貸計算 ---------- */
   let rowSequence = 0;
 
-  /** 可增減「期數 + 數值」的清單，用於分段利率與提前還款 */
-  function initPeriodList(calculator, key, templateId, defaultValue) {
+  /** 可增減「期數 + 數值」的清單，用於分段利率、提前還款與中途提領；first 為第一筆的預設期數 */
+  function initPeriodList(calculator, key, templateId, defaultValue, first = FIRST_NEW_PERIOD) {
     const box = $(`details[data-list="${key}"]`, calculator.form);
     const rows = $('[data-rows]', box);
     const badge = $('[data-count]', box);
@@ -821,7 +923,7 @@
 
     $('[data-add]', box).addEventListener('click', () => {
       const last = rows.lastElementChild;
-      const lastPeriod = last ? parseNumber($('[data-kind="period"]', last).value) : FIRST_NEW_PERIOD - NEW_PERIOD_STEP;
+      const lastPeriod = last ? parseNumber($('[data-kind="period"]', last).value) : first - NEW_PERIOD_STEP;
       const period = Math.min((Number.isInteger(lastPeriod) ? lastPeriod : 1) + NEW_PERIOD_STEP, MAX_PERIOD);
       const row = createRow();
       const [periodInput, valueInput] = $$('input', row);
@@ -830,7 +932,7 @@
       refreshHints(row);
       updateCount();
       periodInput.focus();
-      calculator.run();
+      calculator.edited();
     });
 
     rows.addEventListener('click', (e) => {
@@ -838,7 +940,7 @@
       if (!button) return;
       button.closest('.period-row').remove();
       updateCount();
-      calculator.run();
+      calculator.edited();
     });
 
     return {
@@ -1055,7 +1157,7 @@
 
     pages.bond = initBond();
     pages.currency = initCurrency();
-    pages.plan = new Calculator('plan', { render: renderPlan, manual: true });
+    pages.plan = initPlan(meta);
     Object.values(pages).forEach((page) => page.restore());
 
     window.addEventListener('hashchange', () => {
