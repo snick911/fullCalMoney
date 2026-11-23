@@ -538,7 +538,16 @@
           </div>
         </fieldset>
       </div>
-      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
+      <!-- 試算要模擬上千種配置，改成按按鈕才計算，打字時不會一直卡住 -->
+      <div class="form-foot">
+        <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
+        <div class="form-foot__action">
+          <span class="form-foot__pending" data-pending hidden>條件已變更，按「開始試算」更新結果</span>
+          <button type="submit" class="btn btn--primary" data-run>
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg><span data-run-label>開始試算</span>
+          </button>
+        </div>
+      </div>
       <p class="form-alert" role="alert" hidden></p>
     </form>
 
@@ -571,7 +580,7 @@
           <h3 class="advice__sub">資產配置</h3>
           <p class="portfolio__summary" data-out="portfolioSummary"></p>
           <div class="table-wrap table-wrap--auto spread" tabindex="0" aria-label="資產配置，可捲動">
-            <table class="data-table data-table--summary">
+            <table class="data-table data-table--summary data-table--portfolio">
               <thead><tr><th scope="col">類型</th><th scope="col">最佳配置（定存／公債／公司債／股票）</th><th scope="col">一般行情</th><th scope="col">預估波動</th><th scope="col">達成機率</th><th scope="col">期滿金額 中位數（10%～90%）</th></tr></thead>
               <tbody data-portfolio-rows></tbody>
             </table>

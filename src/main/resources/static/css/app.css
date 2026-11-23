@@ -347,6 +347,9 @@ select.input option { background: var(--surface); color: var(--fg); }
   margin-top: .75rem;
 }
 .form-foot .check { margin-top: 0; }
+.form-foot__action { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem .85rem; margin-left: auto; }
+.form-foot__pending { color: var(--muted); font-size: .875rem; }
+.btn:disabled { opacity: .6; cursor: progress; }
 .btn--primary { background: var(--accent); color: var(--on-accent); }
 .btn--primary:hover { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
 
@@ -630,6 +633,8 @@ select.input option { background: var(--surface); color: var(--fg); }
 
 /* 資產配置圓餅（甜甜圈）：每段之間留 2px 底色間隔，旁邊列出名稱與比例 */
 .allocation-pie { display: inline-flex; align-items: center; gap: .6rem; }
+/* 配置欄靠左，三列的圓餅與名稱才會上下對齊 */
+.data-table--portfolio tr > :nth-child(2) { text-align: left; }
 .donut { flex: none; }
 .donut circle { fill: none; stroke-width: 7; }
 .donut .donut__track { stroke: var(--stripe); }

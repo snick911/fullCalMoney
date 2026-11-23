@@ -213,13 +213,20 @@
   }
 
   /* ---------- 試算頁共用：輸入後延遲重算，只採用最後一次的結果 ---------- */
+  /** 等瀏覽器畫完下一個畫面；分頁在背景時 requestAnimationFrame 不會執行，最多等 100 毫秒 */
+  const nextPaint = () => new Promise((resolve) => {
+    const timer = setTimeout(resolve, 100);
+    requestAnimationFrame(() => setTimeout(() => { clearTimeout(timer); resolve(); }, 0));
+  });
+
   class Calculator {
     /**
      * @param beforeRun 每次試算前呼叫（保存與送出之前）
      * @param beforeRestore 還原保存的條件前呼叫，可先建立清單列
      * @param afterRestore 還原後呼叫，用來同步依欄位值顯示的區塊
+     * @param manual true：改條件時不自動重算，按「開始試算」（或 Enter）才計算，用在計算量大的頁面
      */
-    constructor(id, { render, onReset, beforeRun, beforeRestore, afterRestore }) {
+    constructor(id, { render, onReset, beforeRun, beforeRestore, afterRestore, manual = false }) {
       const noop = () => {};
       this.id = id;
       this.section = $(`#page-${id}`);
@@ -232,13 +239,16 @@
       this.beforeRun = beforeRun || noop;
       this.beforeRestore = beforeRestore || noop;
       this.afterRestore = afterRestore || noop;
+      this.manual = manual;
+      this.runButton = $('[data-run]', this.form);
+      this.pending = $('[data-pending]', this.form);
       this.loaded = false;
       this.timer = 0;
       this.controller = null;
 
-      this.form.addEventListener('input', (e) => { updateHint(e.target); this.schedule(); });
+      this.form.addEventListener('input', (e) => { updateHint(e.target); this.changed(); });
       //勾選框（金額不顯示小數）不必等打字結束，立即重算
-      this.form.addEventListener('change', (e) => (e.target.type === 'checkbox' ? this.run() : this.schedule()));
+      this.form.addEventListener('change', (e) => (e.target.type === 'checkbox' ? this.run() : this.changed()));
       this.form.addEventListener('submit', (e) => { e.preventDefault(); this.run(); });
       this.form.addEventListener('focusout', (e) => {
         if (e.target.matches('[data-kind="money"]')) formatMoneyInput(e.target);
@@ -266,9 +276,26 @@
       refreshHints(this.form);
     }
 
+    /** 條件改變：自動模式等打字告一段落再算；手動模式只把結果淡化並提示按按鈕 */
+    changed() {
+      if (!this.manual) {
+        this.schedule();
+        return;
+      }
+      if (this.loaded) this.results.classList.add('is-stale');
+      if (this.pending) this.pending.hidden = false;
+    }
+
     schedule() {
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this.run(), DEBOUNCE_MS);
+    }
+
+    /** 計算中：按鈕顯示「試算中…」並停用，避免重複按 */
+    setBusy(busy) {
+      if (!this.runButton) return;
+      this.runButton.disabled = busy;
+      $('[data-run-label]', this.runButton).textContent = busy ? '試算中…' : '開始試算';
     }
 
     async run() {
@@ -280,7 +307,12 @@
       //條件有誤也照樣保存，下次開啟時看到的是使用者最後輸入的內容
       saveForm(this.id, this.form);
       this.results.setAttribute('aria-busy', 'true');
+      if (this.pending) this.pending.hidden = true;
+      this.setBusy(true);
       try {
+        //瀏覽器端引擎在主執行緒上同步計算，先讓「試算中…」畫出來再開始
+        if (this.manual) await nextPaint();
+        if (this.controller !== controller) return;
         const data = await callApi(this.endpoint, new URLSearchParams(new FormData(this.form)), controller.signal);
         if (this.controller !== controller) return;
         this.showError(null);
@@ -293,7 +325,10 @@
         //保留上一次的結果但淡化，避免打字途中整個畫面跳動
         this.results.classList.add('is-stale');
       } finally {
-        if (this.controller === controller) this.results.removeAttribute('aria-busy');
+        if (this.controller === controller) {
+          this.results.removeAttribute('aria-busy');
+          this.setBusy(false);
+        }
       }
     }
 
@@ -445,7 +480,7 @@
       const [chanceText, chanceClass] = CHANCES[p.chance];
       const badge = p.recommended ? ' <span class="option__tag">建議</span>' : '';
       const tags = `<span class="option__tag${chanceClass}">${chanceText}</span>`
-        + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">期間短於 ${escapeHtml(p.horizon)}</span>`);
+        + (p.horizonOk ? '' : ` <span class="option__tag option__tag--warn">建議 ${escapeHtml(p.horizon)}</span>`);
       return `<tr${p.recommended ? ' class="is-recommended"' : ''}><th scope="row">${profilePill(p)}${badge}`
         + `<span class="portfolio__count">${p.candidates.toLocaleString('zh-TW')} 種中約 ${p.reachable.toLocaleString('zh-TW')} 種機率過半</span></th>`
         + `<td>${allocationPie(p, 48)}</td><td>${fmt.percentFixed(p.typicalRate)}</td><td>${fmt.percentFixed(p.volatility)}</td>`
@@ -1020,7 +1055,7 @@
 
     pages.bond = initBond();
     pages.currency = initCurrency();
-    pages.plan = new Calculator('plan', { render: renderPlan });
+    pages.plan = new Calculator('plan', { render: renderPlan, manual: true });
     Object.values(pages).forEach((page) => page.restore());
 
     window.addEventListener('hashchange', () => {
