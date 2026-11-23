@@ -40,6 +40,20 @@ jobs:
       - name: 建置靜態網站（TeaVM 把 Java 試算程式編譯成 js/engine.js）
         run: mvn -B -P pages clean process-classes
 
+      # GitHub Pages 每個檔案快取 10 分鐘：網址加上提交編號讓新版檔案不會讀到舊快取，
+      # version.json 讓已開啟的頁面知道有新版本
+      - name: 加上版本編號
+        run: |
+          BUILD="${GITHUB_SHA::7}"
+          BUILT="$(TZ=Asia/Taipei date '+%Y/%m/%d %H:%M')"
+          PAGE=target/pages/index.html
+          sed -i -e "s/?v=local/?v=${BUILD}/g" \
+                 -e "s|<meta name=\"build\" content=\"local\">|<meta name=\"build\" content=\"${BUILD}\" data-built=\"${BUILT}\">|" "$PAGE"
+          grep -q "content=\"${BUILD}\"" "$PAGE"
+          if grep -qE '\?v=local|content="local"' "$PAGE"; then echo "index.html 還有沒換掉的 local"; exit 1; fi
+          printf '{"build":"%s","built":"%s"}\n' "$BUILD" "$BUILT" > target/pages/version.json
+          cat target/pages/version.json
+
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5

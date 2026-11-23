@@ -662,6 +662,21 @@ select.input option { background: var(--surface); color: var(--fg); }
 }
 .footer p { margin: 0; }
 
+/* 有新版本時固定在畫面下方的提示列 */
+.update-bar {
+  position: fixed; z-index: 50;
+  left: 50%; bottom: max(1rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(32rem, calc(100% - 2rem));
+  display: flex; align-items: center; gap: .75rem;
+  padding: .65rem .65rem .65rem 1rem;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--fg);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 18%, transparent);
+}
+.update-bar__text { flex: 1; margin: 0; font-size: .9375rem; }
+.update-bar .btn { flex: none; }
+
 /* ---------- 響應式 ---------- */
 @media (max-width: 40rem) {
   .topbar { min-height: 3.25rem; gap: .5rem; }

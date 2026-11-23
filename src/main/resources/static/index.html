@@ -7,9 +7,11 @@
 <meta name="description" content="複利試算、房貸計算、債券報酬、幣別轉換與投資計畫建議，支援手機與電腦瀏覽。">
 <meta name="theme-color" content="#F2F3F5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/app.css">
-<script src="js/boot.js"></script>
-<script src="js/app.js" defer></script>
+<!-- 部署到 GitHub Pages 時，"local" 會換成提交編號，檔案網址每版不同，瀏覽器就不會讀到舊檔 -->
+<meta name="build" content="local">
+<link rel="stylesheet" href="css/app.css?v=local">
+<script src="js/boot.js?v=local"></script>
+<script src="js/app.js?v=local" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main">跳到主要內容</a>
@@ -608,6 +610,11 @@
   <p>試算結果僅供參考，實際金額以金融機構為準。</p>
   <p class="footer__version">FullMoney 理財試算 <span data-version></span></p>
 </footer>
+
+<div class="update-bar" role="status" data-update hidden>
+  <p class="update-bar__text">網站已更新到新版本，重新整理後就會使用最新內容。</p>
+  <button type="button" class="btn btn--primary" data-update-reload>重新整理</button>
+</div>
 
 <template id="tpl-rate-row">
   <div class="period-row">

@@ -19,6 +19,11 @@
   const MAX_SEED = 999999999;
   const FORM_STATE_VERSION = 1;
   const root = document.documentElement;
+  /** 部署版本：GitHub Pages 建置時換成提交編號；本機伺服器維持 local */
+  const buildMeta = document.querySelector('meta[name="build"]');
+  const BUILD = (buildMeta && buildMeta.content) || 'local';
+  const BUILT_AT = (buildMeta && buildMeta.dataset.built) || '';
+  const IS_DEPLOYED = BUILD !== 'local';
 
   /* ---------- 瀏覽器儲存：讀寫失敗時不影響畫面 ---------- */
   const store = {
@@ -181,7 +186,7 @@
 
   async function loadEngine() {
     try {
-      const engine = await import('./engine.js');
+      const engine = await import(IS_DEPLOYED ? `./engine.js?v=${BUILD}` : './engine.js');
       if (typeof engine.call === 'function') engineCall = engine.call;
     } catch (e) {
       /* 載入失敗時改呼叫伺服器 */
@@ -995,7 +1000,8 @@
       });
     }
     fillSelects(meta);
-    if (meta.version) $('[data-version]').textContent = `v${meta.version}`;
+    showVersion(meta.version);
+    watchForUpdate();
 
     pages.compound = new Calculator('compound', { render: renderCompound });
     pages.floating = initFloating();
@@ -1022,6 +1028,45 @@
       window.scrollTo({ top: 0 });
     });
     showPage();
+  }
+
+  /* ---------- 版本與更新提示 ---------- */
+  /** 頁尾顯示程式版本與部署編號，方便確認讀到的是哪一版 */
+  function showVersion(version) {
+    const parts = [];
+    if (version) parts.push(`v${version}`);
+    if (IS_DEPLOYED) parts.push(BUILT_AT ? `版本 ${BUILD}（${BUILT_AT} 部署）` : `版本 ${BUILD}`);
+    $('[data-version]').textContent = parts.join(' ');
+  }
+
+  /*
+   * GitHub Pages 每個檔案都快取 10 分鐘，剛部署後瀏覽器可能還在用舊的頁面。
+   * 開啟頁面與切回這個分頁時，略過快取讀 version.json；版本不同就提示重新整理。
+   */
+  function watchForUpdate() {
+    if (!IS_DEPLOYED) return;
+    const bar = $('[data-update]');
+    $('[data-update-reload]', bar).addEventListener('click', () => window.location.reload());
+    let checking = false;
+    const check = async () => {
+      if (checking || !bar.hidden) return;
+      checking = true;
+      try {
+        const response = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (response.ok) {
+          const latest = await response.json();
+          if (latest && latest.build && latest.build !== BUILD) bar.hidden = false;
+        }
+      } catch (e) {
+        /* 離線或讀取失敗時不提示 */
+      } finally {
+        checking = false;
+      }
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') check();
+    });
+    check();
   }
 
   function initBond() {
