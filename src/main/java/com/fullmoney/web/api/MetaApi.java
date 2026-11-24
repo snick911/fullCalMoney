@@ -1,5 +1,6 @@
 package com.fullmoney.web.api;
 
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,12 +10,15 @@ import com.fullmoney.AppVersion;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
 import com.fullmoney.bean.GlidePath;
+import com.fullmoney.bean.LotteryGame;
 import com.fullmoney.bean.PrepaymentMode;
+import com.fullmoney.bean.PurchaseFrequency;
 import com.fullmoney.bean.RebalanceMode;
 import com.fullmoney.bean.RepaymentMethod;
 import com.fullmoney.bean.ReturnDistribution;
 import com.fullmoney.bean.StressScenario;
 import com.fullmoney.bean.StressTiming;
+import com.fullmoney.service.LotteryCalculator;
 import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.Params;
 
@@ -73,6 +77,23 @@ public final class MetaApi extends ApiEndpoint {
 			timings.add(option(timing.name(), timing.getLabel(), null, null));
 		}
 
+		//樂透投資：每注價格、開獎日與頭獎的保底與長期平均，網頁用來顯示說明與可買幾注
+		LotteryCalculator lottery = new LotteryCalculator();
+		List<Map<String, Object>> games = new ArrayList<>();
+		for (LotteryGame game : LotteryGame.values()) {
+			Map<String, Object> option = option(game.name(), game.getLabel(), "price", game.getPrice());
+			option.put("drawsPerWeek", game.getDrawsPerWeek());
+			option.put("schedule", game.getSchedule());
+			option.put("howTo", game.getHowTo());
+			option.put("jackpotMinimum", game.getJackpotMinimum());
+			option.put("jackpotAverage", lottery.averageJackpot(game) == null ? null : lottery.averageJackpot(game).setScale(0, RoundingMode.HALF_UP));
+			games.add(option);
+		}
+		List<Map<String, Object>> purchases = new ArrayList<>();
+		for (PurchaseFrequency frequency : PurchaseFrequency.values()) {
+			purchases.add(option(frequency.name(), frequency.getLabel(), null, null));
+		}
+
 		Map<String, Object> meta = new LinkedHashMap<>();
 		meta.put("name", AppVersion.NAME);
 		meta.put("version", AppVersion.VERSION);
@@ -85,6 +106,8 @@ public final class MetaApi extends ApiEndpoint {
 		meta.put("returnDistributions", distributions);
 		meta.put("stressScenarios", stresses);
 		meta.put("stressTimings", timings);
+		meta.put("lotteryGames", games);
+		meta.put("purchaseFrequencies", purchases);
 		return meta;
 	}
 

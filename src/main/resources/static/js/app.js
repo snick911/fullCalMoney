@@ -895,6 +895,136 @@
       + `<tbody>${body}</tbody></table></div></div>`;
   }
 
+  /* ---------- 樂透投資 ---------- */
+  const lotteryGames = new Map();
+  const oddsFormat = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 1 });
+  const countFormat = new Intl.NumberFormat('zh-TW', { maximumSignificantDigits: 3 });
+
+  /** 機率：千分之一以上顯示百分比，更小時顯示「約 N 分之 1」 */
+  const chanceText = (p) => {
+    if (p == null) return NO_VALUE;
+    if (p <= 0) return '0%';
+    if (p > 0.9999) return '超過 99.99%';
+    if (p >= 0.001) return fmt.percentFixed(p);
+    return `約 ${numberFormat(0).format(Math.round(1 / p))} 分之 1`;
+  };
+
+  /** 預計中獎次數：很少時保留三位有效數字 ex. 0.0217 次 */
+  const winsText = (n) => {
+    if (n >= 10) return `${numberFormat(0).format(Math.round(n))} 次`;
+    if (n >= 0.0001) return `${countFormat.format(n)} 次`;
+    return '不到 0.0001 次';
+  };
+
+  function renderLottery(d, scope) {
+    const twd = (n) => fmt.twd(n, d.decimals);
+    const cents = (n) => fmt.twd(n, 2);
+    const sim = d.simulation;
+    const jackpot = d.prizes[0];
+    const smallest = d.prizes[d.prizes.length - 1];
+
+    setOut(scope, 'totalSpent', twd(d.totalSpent));
+    setOut(scope, 'returnRate', fmt.percentFixed(d.returnRate));
+    setOut(scope, 'returnRateAfterTax', fmt.percentFixed(d.returnRateAfterTax));
+    setOut(scope, 'expectedBack', twd(d.expectedBack));
+    setOut(scope, 'expectedLoss', twd(d.expectedLoss));
+    setOut(scope, 'simMedian', fmt.percentFixed(sim.medianRate));
+    setOut(scope, 'breakEven', chanceText(sim.breakEvenChance));
+    setOut(scope, 'jackpotChance', chanceText(jackpot.chance));
+    setOut(scope, 'compareValue', twd(d.rows[d.rows.length - 1][4]));
+
+    const lossPer100 = numberFormat(1).format(100 * (1 - d.returnRateAfterTax));
+    setOut(scope, 'lotterySummary', `${d.gameName}每注 ${d.price} 元，把每個獎項的中獎機率乘上獎金再加起來，每注平均拿回 ${cents(d.perBet)}`
+      + `（稅前回報率 ${fmt.percentFixed(d.returnRate)}），扣稅後約 ${cents(d.perBetAfterTax)}（${fmt.percentFixed(d.returnRateAfterTax)}），`
+      + `也就是每買 100 元平均虧 ${lossPer100} 元。`);
+
+    const years = `${d.years} 年`;
+    const jackpotSource = jackpot.estimated ? `以長期平均約 ${compactMoney(jackpot.amount)} 估算`
+      : d.jackpotInput ? `以輸入的 ${compactMoney(jackpot.amount)} 計算` : `固定 ${compactMoney(jackpot.amount)}`;
+    const compare = d.rows[d.rows.length - 1][4];
+    const points = [
+      `每次買 ${numberFormat(0).format(d.betsPerPurchase)} 注（${twd(d.spendPerPurchase)}），${escapeHtml(d.frequency)}，一年 ${d.timesPerYear} 次；`
+        + `${years}共 ${numberFormat(0).format(d.totalBets)} 注、投入 ${twd(d.totalSpent)}，平均拿回 ${twd(d.expectedBack)}、虧損 ${twd(d.expectedLoss)}。`,
+      `平均每 ${oddsFormat.format(d.anyPrizeOdds)} 注中一次獎，${years}預計中獎約 ${winsText(d.expectedPrizeCount)}，`
+        + `但大多是${escapeHtml(smallest.name)}（${twd(smallest.amount)}）這類小獎。`,
+      `頭獎機率 1/${numberFormat(0).format(jackpot.odds)}（${jackpotSource}），${years}內至少中一次頭獎的機率${jackpot.chance >= 0.001 ? '為 ' : ''}${chanceText(jackpot.chance)}。`,
+      `模擬 ${numberFormat(0).format(sim.paths)} 人照同樣方式買：中間那個人拿回 ${twd(sim.median)}（回報率 ${fmt.percentFixed(sim.medianRate)}），`
+        + `最差的 10% 只拿回 ${twd(sim.pessimistic)} 以下，沒有虧損的人${sim.breakEvenChance > 0 ? `只有 ${chanceText(sim.breakEvenChance)}` : '一個也沒有'}。`
+        + (sim.medianRate < d.returnRateAfterTax - 0.02 ? '一般人拿回的比期望回報率少，是因為少數人中了大獎把平均拉高。' : ''),
+      `同樣的錢在每次買彩券時改成定期投資，年報酬率 ${fmt.percent(d.compareRate)} 時 ${years}後約 ${twd(compare)}，比買彩券平均拿回的多 ${twd(compare - d.expectedBack)}。`,
+    ];
+    $('[data-lottery-points]', scope).innerHTML = points.map((p) => `<li>${p}</li>`).join('');
+
+    setOut(scope, 'prizeMeta', `每注 ${d.price} 元，稅後平均拿回 ${cents(d.perBetAfterTax)}`);
+    const sub = (text) => `<span class="asset-gain">${text}</span>`;
+    $('tbody[data-prize-rows]', scope).innerHTML = d.prizes.map((p, i) => {
+      let note = '';
+      if (p.estimated) note = sub('長期平均');
+      else if (i === 0 && d.jackpotInput) note = sub('輸入的金額');
+      return `<tr><th scope="row">${escapeHtml(p.name)}</th><td>${escapeHtml(p.rule)}</td><td>1/${oddsFormat.format(p.odds)}</td>`
+        + `<td>${p.estimated ? '約 ' : ''}${twd(p.amount)}${note}</td>`
+        + `<td>${twd(p.afterTax)}${p.taxed ? sub('扣 20.4% 稅') : ''}</td>`
+        + `<td>${cents(p.expectedValue)}</td><td>${fmt.percent(p.share)}</td>`
+        + `<td>${winsText(p.expectedWins)}</td><td>${chanceText(p.chance)}</td></tr>`;
+    }).join('');
+    $('tfoot[data-prize-foot]', scope).innerHTML = `<tr><th scope="row">合計</th><td>任一獎項</td><td>1/${oddsFormat.format(d.anyPrizeOdds)}</td>`
+      + `<td></td><td></td><td>${cents(d.perBetAfterTax)}</td><td>${fmt.percent(1)}</td><td>${winsText(d.expectedPrizeCount)}</td><td>${chanceText(d.anyPrizeChance)}</td></tr>`;
+
+    setOut(scope, 'rowsMeta', `每年買 ${d.timesPerYear} 次，共 ${numberFormat(0).format(d.totalBets)} 注`);
+    $('tbody[data-rows]', scope).innerHTML = d.rows.map((r) =>
+      `<tr><td>${r[0]}</td><td>${twd(r[1])}</td><td>${twd(r[2])}</td><td class="is-down">${twd(r[3])}</td><td>${twd(r[4])}</td></tr>`).join('');
+  }
+
+  /** 樂透投資：依彩券顯示每注價格、可買幾注、一年買幾次；頭獎金額只有大樂透與威力彩可以輸入 */
+  function initLottery(meta) {
+    (meta.lotteryGames || []).forEach((g) => lotteryGames.set(g.code, g));
+    const section = $('#page-lottery');
+    const game = $('#l-game');
+    const amount = $('#l-amount');
+    const frequency = $('#l-frequency');
+    const jackpot = $('#l-jackpot');
+    const jackpotField = $('[data-jackpot-field]', section);
+    const sync = () => {
+      const g = lotteryGames.get(game.value);
+      if (!g) return;
+      $('[data-game-hint]', section).textContent = `每注 ${g.price} 元，${g.schedule}`;
+
+      const n = parseNumber(amount.value);
+      let betsHint = '';
+      if (Number.isFinite(n)) {
+        const bets = Math.floor(n / g.price);
+        const left = Math.round((n - bets * g.price) * 100) / 100;
+        const wan = fmt.wan(n);
+        betsHint = bets < 1 ? `至少 ${g.price} 元（一注）`
+          : `可買 ${numberFormat(0).format(bets)} 注${left > 0 ? `，剩 ${fmt.amount(left, left % 1 ? 2 : 0)} 元不夠一注` : ''}${wan ? `（${wan}）` : ''}`;
+      }
+      $('[data-bets-hint]', section).textContent = betsHint;
+
+      const times = { EVERY_DRAW: g.drawsPerWeek * 52, WEEKLY: 52, MONTHLY: 12 }[frequency.value];
+      $('[data-times-hint]', section).textContent = times ? `一年 ${times} 次` : '';
+
+      //今彩539 頭獎固定 800 萬，不必輸入；停用的欄位不會送出
+      const pool = g.jackpotAverage != null;
+      jackpotField.hidden = !pool;
+      jackpot.disabled = !pool;
+      if (pool) {
+        const typed = parseNumber(jackpot.value);
+        $('[data-jackpot-hint]', section).textContent = Number.isFinite(typed) ? fmt.wan(typed)
+          : `空白時以長期平均約 ${compactMoney(g.jackpotAverage)} 估算，保底 ${compactMoney(g.jackpotMinimum)}`;
+      }
+    };
+    const calculator = new Calculator('lottery', { render: renderLottery, onReset: sync, afterRestore: sync });
+    //各彩券的頭獎金額差很多，換彩券時清除上一個輸入的頭獎
+    game.addEventListener('change', () => {
+      jackpot.value = '';
+      sync();
+    });
+    frequency.addEventListener('change', sync);
+    [amount, jackpot].forEach((input) => input.addEventListener('input', sync));
+    sync();
+    return calculator;
+  }
+
   /* ---------- 房貸計算 ---------- */
   let rowSequence = 0;
 
@@ -1102,7 +1232,7 @@
     applyFont(root.dataset.font, false);
   }
 
-  /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency、#plan；網址沒指定時回到上次的分頁 ---------- */
+  /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency、#plan、#lottery；網址沒指定時回到上次的分頁 ---------- */
   const pages = {};
 
   function showPage() {
@@ -1158,6 +1288,7 @@
     pages.bond = initBond();
     pages.currency = initCurrency();
     pages.plan = initPlan(meta);
+    pages.lottery = initLottery(meta);
     Object.values(pages).forEach((page) => page.restore());
 
     window.addEventListener('hashchange', () => {

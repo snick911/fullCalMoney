@@ -674,6 +674,15 @@ select.input option { background: var(--surface); color: var(--fg); }
 .data-table tbody tr.is-recommended > * { background: var(--accent-soft); }
 .data-table .option__tag + .option__tag { margin-left: .25rem; }
 
+/* 樂透投資：虧損用危險色；獎項表的中獎條件靠左，合計列加粗 */
+.tile--loss .tile__value { color: var(--danger); }
+.data-table--prizes tr > :nth-child(2) { text-align: left; }
+.data-table tfoot > tr > * {
+  background: var(--surface); font-weight: 700;
+  border-top: 1px solid var(--border); border-bottom: 0;
+}
+.data-table--summary tfoot th { color: var(--fg); }
+
 /* 新台幣債券不顯示換回台幣的欄位 */
 .page.is-domestic [data-foreign] { display: none; }
 

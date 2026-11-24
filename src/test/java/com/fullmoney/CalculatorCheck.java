@@ -19,11 +19,14 @@ import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.InvestmentPlan;
 import com.fullmoney.bean.InvestmentTier;
+import com.fullmoney.bean.LotteryGame;
+import com.fullmoney.bean.LotteryPrize;
 import com.fullmoney.bean.MortgagePrepayment;
 import com.fullmoney.bean.PlanSettings;
 import com.fullmoney.bean.MortgageRateChange;
 import com.fullmoney.bean.MortgageResult;
 import com.fullmoney.bean.PrepaymentMode;
+import com.fullmoney.bean.PurchaseFrequency;
 import com.fullmoney.bean.RebalanceMode;
 import com.fullmoney.bean.RepaymentMethod;
 import com.fullmoney.bean.ReturnDistribution;
@@ -36,6 +39,7 @@ import com.fullmoney.service.CashFlows;
 import com.fullmoney.service.CurrencyConverter;
 import com.fullmoney.service.FloatingMoneyCalculator;
 import com.fullmoney.service.InvestmentPlanner;
+import com.fullmoney.service.LotteryCalculator;
 import com.fullmoney.service.MarketSimulator;
 import com.fullmoney.service.RangeRandom;
 import com.fullmoney.service.MoneyCalculator;
@@ -68,6 +72,7 @@ public final class CalculatorCheck {
 		mortgage();
 		bond();
 		currency();
+		lottery();
 		params();
 		json();
 		endpoints();
@@ -176,6 +181,96 @@ public final class CalculatorCheck {
 
 	private static void currency() {
 		check("currency 1000 USD", "32000.00", new CurrencyConverter().convert(new BigDecimal("1000"), new BigDecimal("32"), BigDecimal.ONE).toPlainString());
+	}
+
+	private static void lottery() {
+		//各獎項的中獎組合數要與排列組合公式相同，打錯一個數字回報率就會錯
+		check("lottery 539 combinations", "1 170 5610 59840 / 575757", combinations(LotteryGame.DAILY_CASH));
+		check("lottery 539 formula", combinations(LotteryGame.DAILY_CASH), choose(5, 5) + " " + choose(5, 4) * choose(34, 1) + " "
+				+ choose(5, 3) * choose(34, 2) + " " + choose(5, 2) * choose(34, 3) + " / " + choose(39, 5));
+		check("lotto formula", combinations(LotteryGame.LOTTO), "1 " + choose(6, 5) + " " + choose(6, 5) * 42 + " " + choose(6, 4) * 42 + " "
+				+ choose(6, 4) * choose(42, 2) + " " + choose(6, 3) * choose(42, 2) + " " + choose(6, 2) * choose(42, 3) + " "
+				+ choose(6, 3) * choose(42, 3) + " / " + choose(49, 6));
+		long first = choose(6, 6);
+		check("super lotto formula", combinations(LotteryGame.SUPER_LOTTO), first + " " + first * 7 + " " + choose(6, 5) * 32 + " " + choose(6, 5) * 32 * 7
+				+ " " + choose(6, 4) * choose(32, 2) + " " + choose(6, 4) * choose(32, 2) * 7 + " " + choose(6, 3) * choose(32, 3) + " "
+				+ choose(6, 2) * choose(32, 4) + " " + choose(6, 3) * choose(32, 3) * 7 + " " + choose(6, 1) * choose(32, 5) + " / " + choose(38, 6) * 8);
+
+		//今彩539 全部固定獎金：(800 萬 + 170 × 2 萬 + 5,610 × 300 + 59,840 × 50) ÷ 575,757 = 27.92 元
+		String daily = lottery("game=DAILY_CASH&amount=230&frequency=EVERY_DRAW&years=10&compareRate=7&round=1&jackpot=1");
+		check("lottery 539 per bet", true, daily.contains("\"perBet\":27.9198,"));
+		check("lottery 539 return", "55.84% 47.76%", rates(daily));
+		check("lottery 539 bets floor", true, daily.contains("\"betsPerPurchase\":4,\"spendPerPurchase\":200,\"timesPerYear\":312,\"totalBets\":12480,"));
+		check("lottery 539 ignores jackpot", true, daily.contains("\"jackpotInput\":false"));
+		check("lottery 539 jackpot taxed", true, daily.contains("\"amount\":8000000,\"afterTax\":6368000,"));
+		check("lottery 539 small prize untaxed", true, daily.contains("\"amount\":300,\"afterTax\":300,\"estimated\":false,\"taxed\":false"));
+
+		//大樂透、威力彩：稅前回報率等於總獎金支出率（獎金池獎項以長期平均估算）
+		String lotto = lottery("game=LOTTO&amount=200&frequency=EVERY_DRAW&years=10&compareRate=7&round=1");
+		check("lotto return", "56.00% 50.52%", rates(lotto));
+		check("lotto jackpot average", true, lotto.contains("\"jackpotAverage\":153977015,"));
+		check("lotto any prize odds", true, lotto.contains("\"anyPrizeOdds\":32.3,"));
+		check("lotto simulation pinned", true, lotto.contains("\"median\":62600,"));
+		check("lotto simulation reproducible", lotto, lottery("game=LOTTO&amount=200&frequency=EVERY_DRAW&years=10&compareRate=7&round=1"));
+		String superLotto = lottery("game=SUPER_LOTTO&amount=100&frequency=MONTHLY&years=1&compareRate=7&round=1");
+		check("super lotto return", "55.00% 47.56%", rates(superLotto));
+		check("super lotto any prize odds", true, superLotto.contains("\"anyPrizeOdds\":8.5,"));
+		check("super lotto compare", true, superLotto.contains("\"rows\":[[1,1200,571,629,1245]]"));
+		String input = lottery("game=SUPER_LOTTO&amount=100&frequency=WEEKLY&years=1&compareRate=7&round=1&jackpot=1%2C000%2C000%2C000");
+		check("super lotto jackpot input", true, input.contains("\"jackpotInput\":true") && input.contains("\"amount\":1000000000,\"afterTax\":796000000,\"estimated\":false"));
+
+		//買很多注時（常態近似）模擬的平均回報率應接近期望值
+		String huge = lottery("game=LOTTO&amount=1%2C000%2C000%2C000&frequency=EVERY_DRAW&years=80&compareRate=7");
+		double expected = number(huge, "\"returnRateAfterTax\":");
+		double simulated = number(huge, "\"meanRate\":");
+		check("lottery simulation mean = expected", true, Math.abs(simulated - expected) < 0.002);
+
+		check("lottery amount below price", true, lottery("game=SUPER_LOTTO&amount=99&frequency=WEEKLY&years=1&compareRate=7").contains("\"field\":\"amount\""));
+		check("lottery jackpot below minimum", true,
+				lottery("game=LOTTO&amount=100&frequency=WEEKLY&years=1&compareRate=7&jackpot=99%2C999%2C999").contains("\"field\":\"jackpot\""));
+		check("lottery game required", true, lottery("amount=100&frequency=WEEKLY&years=1&compareRate=7").contains("\"field\":\"game\""));
+
+		check("lottery at least once", "0.000297443", BigDecimal.valueOf(LotteryCalculator.atLeastOnce(1.0 / 13_983_816, 4160)).round(new java.math.MathContext(6))
+				.toPlainString());
+		check("lottery invested no return", true, LotteryCalculator.investedValue(100, 12, 24, 0) == 2400);
+		check("lottery invested yearly", true, Math.abs(LotteryCalculator.investedValue(100, 1, 1, 0.07) - 107) < 1e-9);
+		check("lottery every draw 539", 312, PurchaseFrequency.EVERY_DRAW.timesPerYear(LotteryGame.DAILY_CASH));
+	}
+
+	private static String lottery(String query) {
+		return call("/api/lottery", query);
+	}
+
+	/** 一種彩券各獎項的中獎組合數 ex. 1 170 5610 59840 / 575757 */
+	private static String combinations(LotteryGame game) {
+		StringBuilder out = new StringBuilder();
+		for (LotteryPrize prize : game.getPrizes()) {
+			out.append(out.length() == 0 ? "" : " ").append(prize.getCombinations());
+		}
+		return out.append(" / ").append(game.getTotalCombinations()).toString();
+	}
+
+	private static long choose(int n, int k) {
+		long result = 1;
+		for (int i = 1; i <= k; i++) {
+			result = result * (n - k + i) / i;
+		}
+		return result;
+	}
+
+	/** 稅前與稅後回報率 ex. 56.00% 50.52% */
+	private static String rates(String json) {
+		return percent(BigDecimal.valueOf(number(json, "\"returnRate\":"))) + " " + percent(BigDecimal.valueOf(number(json, "\"returnRateAfterTax\":")));
+	}
+
+	/** JSON 中 key 後面的數字 */
+	private static double number(String json, String key) {
+		int start = json.indexOf(key) + key.length();
+		int end = start;
+		while (end < json.length() && "-0123456789.E".indexOf(json.charAt(end)) >= 0) {
+			end++;
+		}
+		return Double.parseDouble(json.substring(start, end));
 	}
 
 	private static void params() {
@@ -473,6 +568,9 @@ public final class CalculatorCheck {
 			HttpResponse<String> bond = get(client, base + "/api/bond?currency=TWD&faceValue=10000&buyPrice=98.5&redemptionPrice=100"
 					+ "&couponRate=4.5&frequency=SEMI_ANNUAL&years=10&feeRate=0&taxRate=0");
 			check("http bond TWD", true, bond.statusCode() == 200 && bond.body().contains("\"foreign\":false"));
+
+			HttpResponse<String> lottery = post(client, base + "/api/lottery", "game=DAILY_CASH&amount=50&frequency=MONTHLY&years=1&compareRate=7");
+			check("http lottery", true, lottery.statusCode() == 200 && lottery.body().contains("\"perBet\":27.9198,"));
 
 			HttpResponse<String> currency = get(client, base + "/api/currency?amount=1000&from=USD&fromRate=32&to=TWD");
 			check("http currency", true, currency.body().contains("\"result\":32000.00"));

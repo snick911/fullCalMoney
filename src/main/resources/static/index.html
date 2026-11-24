@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FullMoney 理財試算</title>
-<meta name="description" content="複利試算、房貸計算、債券報酬、幣別轉換與投資計畫建議，支援手機與電腦瀏覽。">
+<meta name="description" content="複利試算、房貸計算、債券報酬、幣別轉換、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
 <meta name="theme-color" content="#F2F3F5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- 部署到 GitHub Pages 時，"local" 會換成提交編號，檔案網址每版不同，瀏覽器就不會讀到舊檔 -->
@@ -44,6 +44,7 @@
       <a class="tab" href="#bond" data-page="bond">債券計算</a>
       <a class="tab" href="#currency" data-page="currency">幣別轉換</a>
       <a class="tab" href="#plan" data-page="plan">投資計畫</a>
+      <a class="tab" href="#lottery" data-page="lottery">樂透投資</a>
     </div>
   </nav>
 
@@ -684,6 +685,102 @@
       <div class="allocation-years" data-allocation-years></div>
       <p class="note">逐年試算：本金與每月投資依當年的配置比例分到定存、公債、公司債、股票，各自以一般行情報酬率（定存 1.75%、公債 4%、公司債 7%、股票依等級 5%～12%）逐月複利，並依模擬設定再平衡、調整股票比例與提領；各資產的「獲利」是該資產累積賺到的金額，再平衡只搬動金額、不改變獲利。「目標進度」是以需要的年化報酬率計算、剛好在期滿達標的金額。實際報酬每年會上下波動，請同時參考達成機率。</p>
       <p class="note">本金在第 1 個月初投入，每月投資在每月月初投入，中途提領在該月月底；需要的年化報酬率是讓期滿金額剛好等於「總投入 − 中途提領 + 期望獲利」的報酬率（逐月複利）。各類標的的「一般行情」與「行情好」報酬率都是假設值，實際報酬會變動，也可能虧損本金。以上依固定規則提供參考，不是個人化的投資建議；投資前請評估自己的風險承受度，必要時諮詢合格的專業顧問。</p>
+    </div>
+  </section>
+
+  <!-- 樂透投資 -->
+  <section class="page" id="page-lottery" data-page="lottery" aria-labelledby="h-lottery" hidden>
+    <div class="page__head">
+      <h1 id="h-lottery">樂透投資</h1>
+      <p class="page__desc">選擇彩券，輸入每次買入的金額與頻率，依每個獎項的中獎機率與獎金算出平均能拿回多少（回報率），並模擬 2,000 人照同樣方式買下來的結果。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/lottery">
+      <div class="card__head">
+        <h2>買入條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="l-game">彩券</label>
+          <select class="input" id="l-game" name="game" data-options="lotteryGames" data-default="LOTTO"></select>
+          <span class="field__hint" data-game-hint></span>
+        </div>
+        <div class="field">
+          <label for="l-amount">每次買入金額</label>
+          <div class="input-wrap"><input class="input" id="l-amount" name="amount" data-kind="money" inputmode="numeric" value="200"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-bets-hint></span>
+        </div>
+        <div class="field">
+          <label for="l-frequency">買入頻率</label>
+          <select class="input" id="l-frequency" name="frequency" data-options="purchaseFrequencies"></select>
+          <span class="field__hint" data-times-hint></span>
+        </div>
+        <div class="field">
+          <label for="l-years">買幾年</label>
+          <div class="input-wrap"><input class="input" id="l-years" name="years" inputmode="numeric" value="10"><span class="input-affix">年</span></div>
+        </div>
+        <div class="field" data-jackpot-field>
+          <label for="l-jackpot">頭獎金額（選填）</label>
+          <div class="input-wrap"><input class="input" id="l-jackpot" name="jackpot" data-kind="money" inputmode="numeric" placeholder="長期平均"><span class="input-affix">元</span></div>
+          <span class="field__hint" data-jackpot-hint></span>
+        </div>
+        <div class="field">
+          <label for="l-compare">對照：定期投資年報酬率</label>
+          <div class="input-wrap"><input class="input" id="l-compare" name="compareRate" inputmode="decimal" value="7"><span class="input-affix">%</span></div>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">總投入金額</span><span class="tile__value" data-out="totalSpent">—</span></div>
+        <div class="tile"><span class="tile__label">期望回報率（稅前）</span><span class="tile__value" data-out="returnRate">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label">期望回報率（稅後）</span><span class="tile__value" data-out="returnRateAfterTax">—</span></div>
+        <div class="tile"><span class="tile__label">平均拿回（稅後）</span><span class="tile__value" data-out="expectedBack">—</span></div>
+        <div class="tile tile--loss"><span class="tile__label">平均虧損</span><span class="tile__value" data-out="expectedLoss">—</span></div>
+      </div>
+
+      <article class="advice" data-level="danger" aria-labelledby="lottery-advice-title">
+        <div class="advice__head">
+          <h2 class="advice__title" id="lottery-advice-title">試算結果</h2>
+          <span class="advice__verdict">彩券不是投資，買越多平均虧越多</span>
+        </div>
+        <p class="advice__summary" data-out="lotterySummary"></p>
+        <ul class="advice__list" data-lottery-points></ul>
+      </article>
+
+      <div class="tiles tiles--secondary">
+        <div class="tile"><span class="tile__label">模擬：一般人拿回（中位數）</span><span class="tile__value" data-out="simMedian">—</span></div>
+        <div class="tile"><span class="tile__label">模擬：沒有虧損的人</span><span class="tile__value" data-out="breakEven">—</span></div>
+        <div class="tile"><span class="tile__label">期間內至少中一次頭獎</span><span class="tile__value" data-out="jackpotChance">—</span></div>
+        <div class="tile"><span class="tile__label">對照：改成定期投資</span><span class="tile__value" data-out="compareValue">—</span></div>
+      </div>
+
+      <div class="card card--flush">
+        <div class="card__head"><h2>各獎項的中獎機率與獎金</h2><span class="card__meta" data-out="prizeMeta"></span></div>
+        <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="各獎項的中獎機率與獎金，可捲動">
+          <table class="data-table data-table--summary data-table--prizes">
+            <thead><tr><th scope="col">獎項</th><th scope="col">中獎條件</th><th scope="col">中獎機率</th><th scope="col">每注獎金</th><th scope="col">稅後獎金</th><th scope="col">每注期望值</th><th scope="col">占回報</th><th scope="col">期間內預計中獎</th><th scope="col">至少中一次</th></tr></thead>
+            <tbody data-prize-rows></tbody>
+            <tfoot data-prize-foot></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="card card--flush">
+        <div class="card__head"><h2>逐年明細</h2><span class="card__meta" data-out="rowsMeta"></span></div>
+        <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
+          <table class="data-table">
+            <thead><tr><th scope="col">年度</th><th scope="col">累積投入</th><th scope="col">平均拿回（稅後）</th><th scope="col">平均虧損</th><th scope="col">對照：定期投資</th></tr></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="note">期望回報率 = Σ（各獎項中獎機率 × 每注獎金）÷ 每注價格。今彩539 全部是固定獎金（頭獎每期總額上限 2,400 萬，多人同時中獎時平分，影響極小未計入）；大樂透、威力彩的總獎金是銷售額的 56%、55%，先付固定獎金，其餘依比率分給頭獎等獎金池的獎項，這些獎項以長期平均估算（頭獎無人中獎時累積到下期，長期來看都會發出去），所以稅前回報率剛好等於總獎金支出率。輸入頭獎金額時只改變頭獎，未計入多人同時中獎平分。單注獎金超過 5,000 元扣 20% 所得稅與 0.4% 印花稅。加碼活動未計入。一年以 52 週計算。</p>
+      <p class="note">模擬：2,000 人各自照同樣的方式買，每注依各獎項機率隨機開獎，獎金池獎項以長期平均計算；「一般人拿回」是中間那個人的稅後中獎總額。對照的定期投資在每次買彩券時改把同樣的錢投入，以設定的年報酬率複利，報酬率是假設值，實際會有漲跌。彩券規則以台灣彩券公告為準，試算僅供參考。</p>
     </div>
   </section>
 </main>
