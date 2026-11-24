@@ -900,13 +900,25 @@
   const oddsFormat = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 1 });
   const countFormat = new Intl.NumberFormat('zh-TW', { maximumSignificantDigits: 3 });
 
-  /** 機率：千分之一以上顯示百分比，更小時顯示「約 N 分之 1」 */
+  const yiFormat = new Intl.NumberFormat('zh-TW', { maximumSignificantDigits: 3 });
+
+  /** 機率：千分之一以上顯示百分比，更小時顯示「約 N 分之 1」，N 超過 1 億時以億為單位 */
   const chanceText = (p) => {
     if (p == null) return NO_VALUE;
     if (p <= 0) return '0%';
     if (p > 0.9999) return '超過 99.99%';
     if (p >= 0.001) return fmt.percentFixed(p);
-    return `約 ${numberFormat(0).format(Math.round(1 / p))} 分之 1`;
+    const n = 1 / p;
+    return n >= 1e8 ? `約 ${yiFormat.format(n / 1e8)} 億分之 1` : `約 ${numberFormat(0).format(Math.round(n))} 分之 1`;
+  };
+
+  /** 回本機率常小到沒有意義，不到 1 兆分之 1 就不列數字 */
+  const tinyChance = (p) => (p < 1e-12 ? '不到 1 兆分之 1' : chanceText(p));
+
+  /** 只靠這個獎回本要中幾個 ex. 6 個；每注獎金不到每注價格時不可能回本 */
+  const breakEvenText = (p, totalBets) => {
+    if (!p.breakEvenPossible) return '不可能';
+    return `${numberFormat(0).format(p.breakEvenWins)} 個${p.breakEvenWins === totalBets ? '（每一注都要中）' : ''}`;
   };
 
   /** 預計中獎次數：很少時保留三位有效數字 ex. 0.0217 次 */
@@ -948,6 +960,9 @@
       `平均每 ${oddsFormat.format(d.anyPrizeOdds)} 注中一次獎，${years}預計中獎約 ${winsText(d.expectedPrizeCount)}，`
         + `但大多是${escapeHtml(smallest.name)}（${twd(smallest.amount)}）這類小獎。`,
       `頭獎機率 1/${numberFormat(0).format(jackpot.odds)}（${jackpotSource}），${years}內至少中一次頭獎的機率${jackpot.chance >= 0.001 ? '為 ' : ''}${chanceText(jackpot.chance)}。`,
+      `要回本（投入 ${twd(d.totalSpent)}，以稅後獎金計算）：${d.prizes.slice(0, Math.min(4, d.prizes.length - 1))
+        .map((p) => `${escapeHtml(p.name)}${p.breakEvenPossible ? `要中 ${numberFormat(0).format(p.breakEvenWins)} 個` : '不可能'}`).join('、')}；`
+        + `最小的${escapeHtml(smallest.name)}${smallest.breakEvenPossible ? `要中 ${breakEvenText(smallest, d.totalBets)}` : '怎麼中都回不了本'}。`,
       `模擬 ${numberFormat(0).format(sim.paths)} 人照同樣方式買：中間那個人拿回 ${twd(sim.median)}（回報率 ${fmt.percentFixed(sim.medianRate)}），`
         + `最差的 10% 只拿回 ${twd(sim.pessimistic)} 以下，沒有虧損的人${sim.breakEvenChance > 0 ? `只有 ${chanceText(sim.breakEvenChance)}` : '一個也沒有'}。`
         + (sim.medianRate < d.returnRateAfterTax - 0.02 ? '一般人拿回的比期望回報率少，是因為少數人中了大獎把平均拉高。' : ''),
@@ -955,8 +970,15 @@
     ];
     $('[data-lottery-points]', scope).innerHTML = points.map((p) => `<li>${p}</li>`).join('');
 
-    setOut(scope, 'prizeMeta', `每注 ${d.price} 元，稅後平均拿回 ${cents(d.perBetAfterTax)}`);
     const sub = (text) => `<span class="asset-gain">${text}</span>`;
+    //中幾個才回本：只靠同一個獎項，稅後獎金累計到總投入
+    setOut(scope, 'breakEvenMeta', `投入 ${twd(d.totalSpent)}，只靠同一個獎項、以稅後獎金計算`);
+    $('tbody[data-break-even-rows]', scope).innerHTML = d.prizes.map((p) =>
+      `<tr><th scope="row">${escapeHtml(p.name)}</th><td>${p.estimated ? '約 ' : ''}${twd(p.afterTax)}${p.estimated ? sub('長期平均') : ''}</td>`
+      + `<td class="is-accent">${breakEvenText(p, d.totalBets)}${p.breakEvenPossible ? '' : sub(`每注獎金不到 ${d.price} 元`)}</td>`
+      + `<td>${winsText(p.expectedWins)}</td><td>${p.breakEvenPossible ? tinyChance(p.breakEvenChance) : NO_VALUE}</td></tr>`).join('');
+
+    setOut(scope, 'prizeMeta', `每注 ${d.price} 元，稅後平均拿回 ${cents(d.perBetAfterTax)}`);
     $('tbody[data-prize-rows]', scope).innerHTML = d.prizes.map((p, i) => {
       let note = '';
       if (p.estimated) note = sub('長期平均');

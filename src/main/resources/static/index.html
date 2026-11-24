@@ -743,14 +743,23 @@
         <div class="tile tile--loss"><span class="tile__label">平均虧損</span><span class="tile__value" data-out="expectedLoss">—</span></div>
       </div>
 
-      <article class="advice" data-level="danger" aria-labelledby="lottery-advice-title">
+      <article class="advice" aria-labelledby="lottery-advice-title">
         <div class="advice__head">
           <h2 class="advice__title" id="lottery-advice-title">試算結果</h2>
-          <span class="advice__verdict">彩券不是投資，買越多平均虧越多</span>
         </div>
         <p class="advice__summary" data-out="lotterySummary"></p>
         <ul class="advice__list" data-lottery-points></ul>
       </article>
+
+      <div class="card card--flush">
+        <div class="card__head"><h2>中幾個才回本</h2><span class="card__meta" data-out="breakEvenMeta"></span></div>
+        <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="中幾個才回本，可捲動">
+          <table class="data-table data-table--summary">
+            <thead><tr><th scope="col">獎項</th><th scope="col">稅後獎金</th><th scope="col">回本要中</th><th scope="col">期間內預計中獎</th><th scope="col">中到這麼多個的機率</th></tr></thead>
+            <tbody data-break-even-rows></tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="tiles tiles--secondary">
         <div class="tile"><span class="tile__label">模擬：一般人拿回（中位數）</span><span class="tile__value" data-out="simMedian">—</span></div>
@@ -779,7 +788,7 @@
           </table>
         </div>
       </div>
-      <p class="note">期望回報率 = Σ（各獎項中獎機率 × 每注獎金）÷ 每注價格。今彩539 全部是固定獎金（頭獎每期總額上限 2,400 萬，多人同時中獎時平分，影響極小未計入）；大樂透、威力彩的總獎金是銷售額的 56%、55%，先付固定獎金，其餘依比率分給頭獎等獎金池的獎項，這些獎項以長期平均估算（頭獎無人中獎時累積到下期，長期來看都會發出去），所以稅前回報率剛好等於總獎金支出率。輸入頭獎金額時只改變頭獎，未計入多人同時中獎平分。單注獎金超過 5,000 元扣 20% 所得稅與 0.4% 印花稅。加碼活動未計入。一年以 52 週計算。</p>
+      <p class="note">期望回報率 = Σ（各獎項中獎機率 × 每注獎金）÷ 每注價格。今彩539 全部是固定獎金（頭獎每期總額上限 2,400 萬，多人同時中獎時平分，影響極小未計入）；大樂透、威力彩的總獎金是銷售額的 56%、55%，先付固定獎金，其餘依比率分給頭獎等獎金池的獎項，這些獎項以長期平均估算（頭獎無人中獎時累積到下期，長期來看都會發出去），所以稅前回報率剛好等於總獎金支出率。輸入頭獎金額時只改變頭獎，未計入多人同時中獎平分。單注獎金超過 5,000 元扣 20% 所得稅與 0.4% 印花稅。「中幾個才回本」= 總投入 ÷ 該獎項的稅後獎金（無條件進位），機率是期間內的總注數中至少中這麼多個的機率（二項分布）。加碼活動未計入。一年以 52 週計算。</p>
       <p class="note">模擬：2,000 人各自照同樣的方式買，每注依各獎項機率隨機開獎，獎金池獎項以長期平均計算；「一般人拿回」是中間那個人的稅後中獎總額。對照的定期投資在每次買彩券時改把同樣的錢投入，以設定的年報酬率複利，報酬率是假設值，實際會有漲跌。彩券規則以台灣彩券公告為準，試算僅供參考。</p>
     </div>
   </section>

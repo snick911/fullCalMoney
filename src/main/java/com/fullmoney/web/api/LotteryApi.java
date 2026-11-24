@@ -86,6 +86,11 @@ public final class LotteryApi extends ApiEndpoint {
 					: value.getExpectedValue().divide(perBetAfterTax, 10, RoundingMode.HALF_UP)));
 			prize.put("expectedWins", value.getProbability() * totalBets);
 			prize.put("chance", LotteryCalculator.atLeastOnce(value.getProbability(), totalBets));
+			//只靠這個獎回本要中幾個；比總注數還多時不可能（每注獎金不到每注價格）
+			long breakEven = LotteryCalculator.winsToBreakEven(totalSpent, value.getAfterTax());
+			prize.put("breakEvenWins", breakEven);
+			prize.put("breakEvenPossible", breakEven <= totalBets);
+			prize.put("breakEvenChance", tiny(LotteryCalculator.atLeast(totalBets, value.getProbability(), breakEven)));
 			prizes.add(prize);
 		}
 
@@ -165,6 +170,11 @@ public final class LotteryApi extends ApiEndpoint {
 	private static BigDecimal odds(long total, long combinations) {
 		BigDecimal value = BigDecimal.valueOf(total).divide(BigDecimal.valueOf(combinations), 1, RoundingMode.HALF_UP);
 		return value.compareTo(BigDecimal.valueOf(100)) >= 0 ? value.setScale(0, RoundingMode.HALF_UP) : value.stripTrailingZeros();
+	}
+
+	/** 小於千兆分之一的機率輸出為 0，避免 JSON 出現幾百位小數 */
+	private static double tiny(double probability) {
+		return probability < 1e-15 ? 0 : probability;
 	}
 
 	private static BigDecimal money(double amount, boolean whole) {

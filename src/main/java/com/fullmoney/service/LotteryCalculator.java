@@ -26,6 +26,11 @@ public final class LotteryCalculator {
 	/** 二項分布的平均次數低於此值時逐一累加機率（精確），否則以常態分布近似 */
 	private static final double EXACT_BINOMIAL_MEAN = 30;
 	private static final double SMALL_PROBABILITY = 1e-4;
+	/** 至少 k 次的機率：標準差超過此值時以常態分布近似，機率低於此值時以卜瓦松分布近似 */
+	private static final double NORMAL_SD = 2000;
+	private static final double POISSON_PROBABILITY = 0.01;
+	private static final double[] LANCZOS = { 0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+			12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7 };
 
 	/**
 	 * @return 頭獎的長期平均獎金；頭獎是固定獎金時為 null
@@ -141,6 +146,91 @@ public final class LotteryCalculator {
 		double x = n * logOneMinus(p);
 		//x 很小時 exp(x) − 1 直接相減會失去精度，改用泰勒展開
 		return Math.abs(x) < 1e-5 ? -(x + x * x / 2 + x * x * x / 6) : 1 - Math.exp(x);
+	}
+
+	/**
+	 * 只靠同一個獎項回本：稅後獎金累計不少於總投入要中幾個（無條件進位）
+	 */
+	public static long winsToBreakEven(BigDecimal spent, BigDecimal afterTax) {
+		return spent.divide(afterTax, 0, RoundingMode.CEILING).longValue();
+	}
+
+	/**
+	 * 二項分布 B(n, p) 至少發生 k 次的機率。平均次數多時以常態分布近似；p 很小時以卜瓦松分布近似
+	 * （n 很大時二項係數的對數相減會失去精度），否則逐項累加二項分布的機率
+	 */
+	public static double atLeast(double n, double p, double k) {
+		if (k <= 0 || p >= 1) {
+			return 1;
+		}
+		if (k > n || p <= 0) {
+			return 0;
+		}
+		if (k == 1) {
+			return atLeastOnce(p, n);
+		}
+		double mean = n * p;
+		double sd = Math.sqrt(mean * (1 - p));
+		if (sd > NORMAL_SD) {
+			return 0.5 * erfc((k - 0.5 - mean) / sd / Math.sqrt(2));
+		}
+		boolean poisson = p < POISSON_PROBABILITY;
+		double odds = p / (1 - p);
+		if (k > mean) {
+			//右尾：從 k 往上加，項越來越小
+			double term = Math.exp(logProbability(n, p, k, poisson));
+			double sum = 0;
+			for (double j = k; j <= n && term > 0; j++) {
+				sum += term;
+				if (term < sum * 1e-16) {
+					break;
+				}
+				term *= poisson ? mean / (j + 1) : (n - j) / (j + 1) * odds;
+			}
+			return Math.min(1, sum);
+		}
+		//k 不超過平均：1 − 至多 k − 1 次，從 k − 1 往下加
+		double j = k - 1;
+		double term = Math.exp(logProbability(n, p, j, poisson));
+		double sum = 0;
+		while (j >= 0 && term > 0) {
+			sum += term;
+			if (term < sum * 1e-16) {
+				break;
+			}
+			term *= poisson ? j / mean : j / (n - j + 1) / odds;
+			j--;
+		}
+		return Math.max(0, 1 - sum);
+	}
+
+	/** 剛好 k 次的機率取對數：二項分布或卜瓦松分布（平均 n × p） */
+	private static double logProbability(double n, double p, double k, boolean poisson) {
+		if (poisson) {
+			double mean = n * p;
+			return k * Math.log(mean) - mean - logGamma(k + 1);
+		}
+		return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1) + k * Math.log(p) + (n - k) * logOneMinus(p);
+	}
+
+	/** ln Γ(x)，x ≥ 1，Lanczos 近似（g = 7） */
+	private static double logGamma(double x) {
+		double z = x - 1;
+		double sum = LANCZOS[0];
+		for (int i = 1; i < LANCZOS.length; i++) {
+			sum += LANCZOS[i] / (z + i);
+		}
+		double t = z + 7.5;
+		return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(sum);
+	}
+
+	/** 互補誤差函數，相對誤差小於 1.2 × 10⁻⁷（Numerical Recipes erfcc） */
+	private static double erfc(double x) {
+		double z = Math.abs(x);
+		double t = 1 / (1 + 0.5 * z);
+		double r = t * Math.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806
+				+ t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+		return x >= 0 ? r : 2 - r;
 	}
 
 	/**

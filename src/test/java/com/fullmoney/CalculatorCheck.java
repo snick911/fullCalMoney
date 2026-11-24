@@ -204,6 +204,11 @@ public final class CalculatorCheck {
 		check("lottery 539 ignores jackpot", true, daily.contains("\"jackpotInput\":false"));
 		check("lottery 539 jackpot taxed", true, daily.contains("\"amount\":8000000,\"afterTax\":6368000,"));
 		check("lottery 539 small prize untaxed", true, daily.contains("\"amount\":300,\"afterTax\":300,\"estimated\":false,\"taxed\":false"));
+		//中幾個才回本：投入 624,000 ÷ 稅後獎金（6,368,000、15,920、300、50）無條件進位；肆獎 50 元要每一注都中
+		check("lottery 539 break-even wins", "1 40 2080 12480", breakEvenWins(daily));
+		check("lottery 539 break-even possible", true, !daily.contains("\"breakEvenPossible\":false"));
+		check("lottery 539 break-even jackpot = at least once", true,
+				number(daily, "\"breakEvenChance\":") == number(daily, "\"chance\":"));
 
 		//大樂透、威力彩：稅前回報率等於總獎金支出率（獎金池獎項以長期平均估算）
 		String lotto = lottery("game=LOTTO&amount=200&frequency=EVERY_DRAW&years=10&compareRate=7&round=1");
@@ -211,6 +216,9 @@ public final class CalculatorCheck {
 		check("lotto jackpot average", true, lotto.contains("\"jackpotAverage\":153977015,"));
 		check("lotto any prize odds", true, lotto.contains("\"anyPrizeOdds\":32.3,"));
 		check("lotto simulation pinned", true, lotto.contains("\"median\":62600,"));
+		check("lotto break-even wins", "1 1 6 20 104 208 520 520", breakEvenWins(lotto));
+		//參獎要中 6 個：卜瓦松（平均 0.075 次）至少 6 次約 2.31 × 10⁻¹⁰
+		check("lotto break-even third prize chance", true, lotto.contains("\"breakEvenWins\":6,\"breakEvenPossible\":true,\"breakEvenChance\":0.000000000231"));
 		check("lotto simulation reproducible", lotto, lottery("game=LOTTO&amount=200&frequency=EVERY_DRAW&years=10&compareRate=7&round=1"));
 		String superLotto = lottery("game=SUPER_LOTTO&amount=100&frequency=MONTHLY&years=1&compareRate=7&round=1");
 		check("super lotto return", "55.00% 47.56%", rates(superLotto));
@@ -235,6 +243,25 @@ public final class CalculatorCheck {
 		check("lottery invested no return", true, LotteryCalculator.investedValue(100, 12, 24, 0) == 2400);
 		check("lottery invested yearly", true, Math.abs(LotteryCalculator.investedValue(100, 1, 1, 0.07) - 107) < 1e-9);
 		check("lottery every draw 539", 312, PurchaseFrequency.EVERY_DRAW.timesPerYear(LotteryGame.DAILY_CASH));
+
+		//至少 k 次的機率：精確二項、卜瓦松近似、常態近似與邊界
+		check("binomial tail exact", true, Math.abs(LotteryCalculator.atLeast(10, 0.5, 8) - 56.0 / 1024) < 1e-12);
+		check("binomial tail lower side", true, Math.abs(LotteryCalculator.atLeast(10, 0.5, 3) - (1 - 56.0 / 1024)) < 1e-12);
+		check("binomial tail poisson", true, Math.abs(LotteryCalculator.atLeast(1e6, 1e-6, 2) - (1 - 2 / Math.E)) < 1e-6);
+		check("binomial tail normal", true, Math.abs(LotteryCalculator.atLeast(1e12, 0.5, 5e11) - 0.5) < 1e-3);
+		check("binomial tail bounds", "1.0 0.0 1.0", LotteryCalculator.atLeast(5, 0.1, 0) + " " + LotteryCalculator.atLeast(5, 0.1, 6) + " "
+				+ LotteryCalculator.atLeast(5, 1, 5));
+		check("lottery break-even ceiling", 3, (int) LotteryCalculator.winsToBreakEven(new BigDecimal("1001"), new BigDecimal("500")));
+	}
+
+	/** 各獎項回本要中幾個，以空白分隔 */
+	private static String breakEvenWins(String json) {
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"breakEvenWins\":(\\d+)").matcher(json);
+		StringBuilder out = new StringBuilder();
+		while (matcher.find()) {
+			out.append(out.length() == 0 ? "" : " ").append(matcher.group(1));
+		}
+		return out.toString();
 	}
 
 	private static String lottery(String query) {
