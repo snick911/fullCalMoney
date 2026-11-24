@@ -16,6 +16,8 @@ import com.fullmoney.bean.AllocationProfile;
 import com.fullmoney.bean.BondCondition;
 import com.fullmoney.bean.BondResult;
 import com.fullmoney.bean.CouponFrequency;
+import com.fullmoney.bean.DepositReturn;
+import com.fullmoney.bean.DepositRollover;
 import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.InvestmentPlan;
 import com.fullmoney.bean.InvestmentTier;
@@ -33,6 +35,8 @@ import com.fullmoney.bean.ReturnDistribution;
 import com.fullmoney.bean.SaveMoney;
 import com.fullmoney.bean.StressScenario;
 import com.fullmoney.bean.StressTiming;
+import com.fullmoney.bean.TimeDeposit;
+import com.fullmoney.bean.TimeDepositResult;
 import com.fullmoney.service.Allocation;
 import com.fullmoney.service.BondCalculator;
 import com.fullmoney.service.CashFlows;
@@ -44,6 +48,7 @@ import com.fullmoney.service.MarketSimulator;
 import com.fullmoney.service.RangeRandom;
 import com.fullmoney.service.MoneyCalculator;
 import com.fullmoney.service.MortgageCalculator;
+import com.fullmoney.service.TimeDepositCalculator;
 import com.fullmoney.web.ApiEndpoint;
 import com.fullmoney.web.ApiResponse;
 import com.fullmoney.web.BadRequestException;
@@ -181,6 +186,60 @@ public final class CalculatorCheck {
 
 	private static void currency() {
 		check("currency 1000 USD", "32000.00", new CurrencyConverter().convert(new BigDecimal("1000"), new BigDecimal("32"), BigDecimal.ONE).toPlainString());
+		deposit();
+	}
+
+	/**
+	 * 依序定存：USD 31,250 先存 3 個月 4%、再存 9 個月 3.6%
+	 * 本息續存：312.50 + 31,562.50 × 3.6% × 9 ÷ 12 = 852.19 → 利息 1,164.69；本金續存：312.50 + 843.75 = 1,156.25
+	 */
+	private static void deposit() {
+		TimeDepositCalculator calculator = new TimeDepositCalculator();
+		BigDecimal principal = new BigDecimal("31250.00");
+		List<TimeDeposit> deposits = List.of(new TimeDeposit(3, new BigDecimal("0.04")), new TimeDeposit(9, new BigDecimal("0.036")));
+		TimeDepositResult compound = calculator.calculate(principal, deposits, DepositRollover.COMPOUND);
+		check("deposit first interest", "312.50", compound.getPeriods().get(0).getInterest().toPlainString());
+		check("deposit second principal", "31562.50", compound.getPeriods().get(1).getPrincipal().toPlainString());
+		check("deposit compound interest", "1164.69", compound.getTotalInterest().toPlainString());
+		check("deposit months", 12, compound.getMonths());
+		check("deposit second span", "4-12", compound.getPeriods().get(1).getStartMonth() + "-" + compound.getPeriods().get(1).getEndMonth());
+		TimeDepositResult simple = calculator.calculate(principal, deposits, DepositRollover.PRINCIPAL);
+		check("deposit principal-only interest", "1156.25", simple.getTotalInterest().toPlainString());
+
+		//新台幣 100 萬以 32 換成 USD 31,250，到期以 31 換回：本金 968,750 + 利息 36,105.39
+		DepositReturn settled = calculator.settle(new BigDecimal("1000000.00"), compound, new BigDecimal("31"));
+		check("deposit value", "1004855.39", settled.getValue().toPlainString());
+		check("deposit exchange gain", "-31250.00", settled.getExchangeGain().toPlainString());
+		check("deposit profit", "4855.39", settled.getProfit().toPlainString());
+		check("deposit total return", "0.49%", percent(settled.getTotalReturn()));
+		check("deposit annual = total for 12 months", percent(settled.getTotalReturn()), percent(settled.getAnnualReturn()));
+		check("deposit break-even", "30.8502", calculator.breakEvenRate(new BigDecimal("1000000.00"), compound).setScale(4, RoundingMode.HALF_UP).toPlainString());
+		//半年賺 2%：年化 1.02² − 1 = 4.04%
+		TimeDepositResult half = calculator.calculate(new BigDecimal("100"), List.of(new TimeDeposit(6, new BigDecimal("0.04"))), DepositRollover.COMPOUND);
+		check("deposit annualized half year", "4.04%", percent(calculator.settle(new BigDecimal("100"), half, BigDecimal.ONE).getAnnualReturn()));
+
+		String api = call("/api/currency", "amount=1%2C000%2C000&from=TWD&to=USD&toRate=32&depositTerm=3&depositRate=4&depositTerm=9&depositRate=3.6"
+				+ "&rollover=COMPOUND&settle=TWD&settleRate=31");
+		check("deposit api interest", true, api.contains("\"interest\":1164.69,"));
+		check("deposit api value", true, api.contains("\"value\":1004855.39,"));
+		check("deposit api rates", true, api.contains("\"nowRate\":\"32\",\"estimateRate\":\"31\",") && api.contains("\"breakEvenRate\":\"30.8502\""));
+		check("deposit api row", true, api.contains("[2,4,12,9,\"3.6\",31562.50,852.19,32414.69,1164.69]"));
+		//目前匯率 ±3、5、10% 共 7 列，加上預估與損益兩平
+		check("deposit api scenarios", 9, api.split("\"rate\":").length - 1);
+		check("deposit api estimate once", 1, api.split("\"estimate\":true").length - 1);
+
+		//換回定存幣別：不換匯，報酬只有利息
+		String same = call("/api/currency", "amount=1000000&from=TWD&to=USD&toRate=32&depositTerm=3&depositRate=4&depositTerm=9&depositRate=3.6&settle=USD");
+		check("deposit same currency", true, same.contains("\"sameCurrency\":true") && same.contains("\"profit\":1164.69,") && same.contains("\"scenarios\":[]"));
+		//換回第三種貨幣需要它的目前匯率
+		String missing = call("/api/currency", "amount=1000&from=TWD&to=USD&toRate=32&depositTerm=12&depositRate=4&settle=EUR&settleRate=0.9");
+		check("deposit settle now required", true, missing.contains("\"field\":\"settleNowRate\""));
+		String euro = call("/api/currency", "amount=1000&from=TWD&to=USD&toRate=32&depositTerm=12&depositRate=4&settle=EUR&settleNowRate=35&settleRate=0.9");
+		check("deposit third currency cost", true, euro.contains("\"cost\":28.57,") && euro.contains("\"nowRate\":\"0.914286\""));
+		String badTerm = call("/api/currency", "amount=1000&from=TWD&to=USD&toRate=32&depositTerm=12&depositRate=4&depositTerm=13&depositRate=4&settleRate=31");
+		check("deposit bad term field", true, badTerm.contains("\"field\":\"depositTerm:1\""));
+		String none = call("/api/currency", "amount=1000&from=USD&fromRate=32&to=TWD");
+		check("deposit none", true, none.contains("\"deposit\":null"));
 	}
 
 	private static void lottery() {
@@ -602,7 +661,9 @@ public final class CalculatorCheck {
 			HttpResponse<String> currency = get(client, base + "/api/currency?amount=1000&from=USD&fromRate=32&to=TWD");
 			check("http currency", true, currency.body().contains("\"result\":32000.00"));
 			HttpResponse<String> currencyWhole = get(client, base + "/api/currency?amount=1000&from=TWD&to=USD&toRate=32&round=1");
-			check("http currency whole", true, currencyWhole.body().contains("\"decimals\":0,\"result\":31,"));
+			check("http currency whole", true, currencyWhole.body().contains("\"decimals\":0,\"amount\":1000,\"result\":31,"));
+			//貨幣投資的線上匯率由瀏覽器直接讀取，CSP 要允許這些網址
+			check("http csp rate sources", true, currencyWhole.headers().firstValue("Content-Security-Policy").orElse("").contains("https://open.er-api.com"));
 
 			check("http meta", true, get(client, base + "/api/meta").body().contains("\"version\":\"" + AppVersion.VERSION + "\""));
 			check("http unknown api", "404", String.valueOf(get(client, base + "/api/compoundx").statusCode()));

@@ -9,6 +9,7 @@ import java.util.Map;
 import com.fullmoney.AppVersion;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
+import com.fullmoney.bean.DepositRollover;
 import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.LotteryGame;
 import com.fullmoney.bean.PrepaymentMode;
@@ -93,6 +94,11 @@ public final class MetaApi extends ApiEndpoint {
 		for (PurchaseFrequency frequency : PurchaseFrequency.values()) {
 			purchases.add(option(frequency.name(), frequency.getLabel(), null, null));
 		}
+		//貨幣投資：定存到期後的續存方式
+		List<Map<String, Object>> rollovers = new ArrayList<>();
+		for (DepositRollover rollover : DepositRollover.values()) {
+			rollovers.add(option(rollover.name(), rollover.getLabel(), null, null));
+		}
 
 		Map<String, Object> meta = new LinkedHashMap<>();
 		meta.put("name", AppVersion.NAME);
@@ -108,6 +114,7 @@ public final class MetaApi extends ApiEndpoint {
 		meta.put("stressTimings", timings);
 		meta.put("lotteryGames", games);
 		meta.put("purchaseFrequencies", purchases);
+		meta.put("depositRollovers", rollovers);
 		return meta;
 	}
 

@@ -686,6 +686,26 @@ select.input option { background: var(--surface); color: var(--fg); }
 /* 新台幣債券不顯示換回台幣的欄位 */
 .page.is-domestic [data-foreign] { display: none; }
 
+/* 貨幣投資：線上匯率來源、定存清單與換回設定 */
+.rate-source {
+  margin-top: 1rem; padding: .75rem .85rem;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--stripe);
+}
+.rate-source__controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
+.rate-source__label { color: var(--muted); font-size: .875rem; font-weight: 700; }
+.rate-source__select { width: auto; flex: 1 1 12rem; max-width: 20rem; }
+.rate-source__status { margin: .55rem 0 0; color: var(--muted); font-size: .8125rem; }
+.rate-source__status:empty { display: none; }
+.rate-source__status.is-error { color: var(--danger); font-weight: 700; }
+.rate-source__status a { color: var(--accent); }
+.deposit-settle { margin-top: 1rem; }
+.link-btn {
+  padding: 0; border: 0; background: none; color: var(--accent);
+  font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.results__group { display: flex; flex-direction: column; gap: 1rem; }
+.tile--gain .tile__value { color: var(--accent); }
+
 /* ---------- 頁尾 ---------- */
 .footer {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem 1.5rem;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FullMoney 理財試算</title>
-<meta name="description" content="複利試算、房貸計算、債券報酬、幣別轉換、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
+<meta name="description" content="複利試算、房貸計算、債券報酬、貨幣投資（換匯與外幣定存）、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
 <meta name="theme-color" content="#F2F3F5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- 部署到 GitHub Pages 時，"local" 會換成提交編號，檔案網址每版不同，瀏覽器就不會讀到舊檔 -->
@@ -42,7 +42,7 @@
       <a class="tab" href="#floating" data-page="floating">複利試算（浮動）</a>
       <a class="tab" href="#mortgage" data-page="mortgage">房貸計算</a>
       <a class="tab" href="#bond" data-page="bond">債券計算</a>
-      <a class="tab" href="#currency" data-page="currency">幣別轉換</a>
+      <a class="tab" href="#currency" data-page="currency">貨幣投資</a>
       <a class="tab" href="#plan" data-page="plan">投資計畫</a>
       <a class="tab" href="#lottery" data-page="lottery">樂透投資</a>
     </div>
@@ -428,32 +428,32 @@
     </div>
   </section>
 
-  <!-- 幣別轉換 -->
+  <!-- 貨幣投資：換匯後依序定存，到期本息以預估匯率換回指定貨幣 -->
   <section class="page" id="page-currency" data-page="currency" aria-labelledby="h-currency" hidden>
     <div class="page__head">
-      <h1 id="h-currency">幣別轉換</h1>
-      <p class="page__desc">透過新台幣換算兩種幣別，匯率由你輸入銀行的實際牌告或成交匯率。</p>
+      <h1 id="h-currency">貨幣投資</h1>
+      <p class="page__desc">把錢換成另一種貨幣後依序定存，最後把本金與利息以預估匯率換回指定貨幣，算出利息、匯兌損益與總報酬。匯率可以自行輸入，也可以線上取得最新參考匯率。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/currency">
       <div class="card__head">
-        <h2>轉換條件</h2>
+        <h2>換匯</h2>
         <button type="reset" class="btn btn--ghost">恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
           <label for="x-amount">金額</label>
-          <input class="input" id="x-amount" name="amount" data-kind="money" inputmode="decimal" value="1,000">
+          <input class="input" id="x-amount" name="amount" data-kind="money" inputmode="decimal" value="1,000,000">
         </div>
       </div>
       <div class="exchange">
         <div class="exchange__side">
           <div class="field">
             <label for="x-from">從</label>
-            <select class="input" id="x-from" name="from" data-options="currencies" data-default="USD"></select>
+            <select class="input" id="x-from" name="from" data-options="currencies" data-default="TWD"></select>
           </div>
           <div class="field">
-            <label for="x-from-rate" data-rate-label="from">1 USD 可換新台幣</label>
+            <label for="x-from-rate" data-rate-label="from">1 TWD 可換新台幣</label>
             <input class="input" id="x-from-rate" name="fromRate" inputmode="decimal" data-rate-for="x-from">
           </div>
         </div>
@@ -463,24 +463,112 @@
         <div class="exchange__side">
           <div class="field">
             <label for="x-to">到</label>
-            <select class="input" id="x-to" name="to" data-options="currencies" data-default="TWD"></select>
+            <select class="input" id="x-to" name="to" data-options="currencies" data-default="USD"></select>
           </div>
           <div class="field">
-            <label for="x-to-rate" data-rate-label="to">1 TWD 可換新台幣</label>
+            <label for="x-to-rate" data-rate-label="to">1 USD 可換新台幣</label>
             <input class="input" id="x-to-rate" name="toRate" inputmode="decimal" data-rate-for="x-to">
           </div>
         </div>
       </div>
+
+      <!-- 線上匯率：瀏覽器直接向公開匯率網站讀取，只在按下按鈕時連線 -->
+      <div class="rate-source">
+        <div class="rate-source__controls">
+          <label class="rate-source__label" for="x-source">匯率來源</label>
+          <select class="input rate-source__select" id="x-source" data-rate-source></select>
+          <button type="button" class="btn btn--outline" data-fetch-rates>
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4.5 11a7.5 7.5 0 0 1 13-4.2L20 9"/><path d="M20 4v5h-5"/><path d="M19.5 13a7.5 7.5 0 0 1-13 4.2L4 15"/><path d="M4 20v-5h5"/></svg><span data-fetch-label>取得最新匯率</span>
+          </button>
+        </div>
+        <p class="rate-source__status" data-rate-status role="status"></p>
+      </div>
+
+      <fieldset class="fieldset">
+        <legend>定存 <span class="fieldset__hint" data-deposit-caption>（本金為上方的轉換結果）</span></legend>
+        <p class="sublist__desc">一筆到期後接著存下一筆，存期 1 個月到 1 年，每筆可設定不同的年利率。</p>
+        <div class="sublist__rows" data-deposit-rows></div>
+        <button type="button" class="btn btn--outline" data-add-deposit>
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新增定存
+        </button>
+        <div class="fields fields--settings deposit-settle">
+          <div class="field">
+            <label for="x-rollover">到期後</label>
+            <select class="input" id="x-rollover" name="rollover" data-options="depositRollovers"></select>
+          </div>
+          <div class="field">
+            <label for="x-settle">換回貨幣</label>
+            <select class="input" id="x-settle" name="settle" data-options="currencies" data-default="TWD"></select>
+          </div>
+          <div class="field">
+            <label for="x-settle-rate" data-settle-rate-label>到期 1 USD 可換新台幣</label>
+            <input class="input" id="x-settle-rate" name="settleRate" inputmode="decimal" value="32">
+            <span class="field__hint"><span data-settle-now></span> <button type="button" class="link-btn" data-use-now>帶入目前匯率</button></span>
+          </div>
+          <div class="field" data-settle-now-field hidden>
+            <label for="x-settle-now-rate">目前 1 EUR 可換新台幣</label>
+            <input class="input" id="x-settle-now-rate" name="settleNowRate" inputmode="decimal" disabled>
+          </div>
+        </div>
+        <!-- 1：到期預估匯率跟著目前匯率；使用者自行輸入後為 0 -->
+        <input type="hidden" name="settleRateAuto" value="1">
+      </fieldset>
       <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
       <p class="form-alert" role="alert" hidden></p>
     </form>
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile tile--primary"><span class="tile__label">轉換結果</span><span class="tile__value" data-out="result">—</span></div>
+        <div class="tile"><span class="tile__label">轉換結果</span><span class="tile__value" data-out="result">—</span></div>
         <div class="tile"><span class="tile__label">換算匯率</span><span class="tile__value" data-out="crossRate">—</span></div>
       </div>
-      <p class="note">匯率預設值僅為範例，請輸入銀行的實際牌告或成交匯率。</p>
+
+      <p class="note" data-deposit-empty hidden>新增定存後，這裡會顯示利息與換回後的總報酬。</p>
+      <div class="results__group" data-deposit-results hidden>
+        <div class="tiles">
+          <div class="tile"><span class="tile__label">投入成本</span><span class="tile__value" data-out="cost">—</span></div>
+          <div class="tile"><span class="tile__label">利息合計</span><span class="tile__value" data-out="interest">—</span></div>
+          <div class="tile tile--primary"><span class="tile__label">預估換回</span><span class="tile__value" data-out="value">—</span></div>
+          <div class="tile" data-profit-tile><span class="tile__label">總報酬</span><span class="tile__value" data-out="profit">—</span></div>
+          <div class="tile"><span class="tile__label">年化報酬率</span><span class="tile__value" data-out="annualReturn">—</span></div>
+        </div>
+        <div class="tiles tiles--secondary">
+          <div class="tile"><span class="tile__label">總報酬率</span><span class="tile__value" data-out="totalReturn">—</span></div>
+          <div class="tile"><span class="tile__label">利息收益（換回後）</span><span class="tile__value" data-out="interestValue">—</span></div>
+          <div class="tile" data-fx><span class="tile__label">匯兌損益</span><span class="tile__value" data-out="exchangeGain">—</span></div>
+          <div class="tile" data-fx><span class="tile__label">損益兩平匯率</span><span class="tile__value" data-out="breakEvenRate">—</span></div>
+        </div>
+
+        <article class="advice" aria-labelledby="currency-advice-title">
+          <div class="advice__head">
+            <h2 class="advice__title" id="currency-advice-title">試算結果</h2>
+          </div>
+          <ul class="advice__list" data-deposit-points></ul>
+        </article>
+
+        <div class="card card--flush">
+          <div class="card__head"><h2>定存明細</h2><span class="card__meta" data-out="depositMeta"></span></div>
+          <div class="table-wrap" tabindex="0" aria-label="定存明細，可捲動">
+            <table class="data-table">
+              <thead><tr><th scope="col">筆數</th><th scope="col">期間</th><th scope="col">存期</th><th scope="col">年利率</th><th scope="col">本金</th><th scope="col">利息</th><th scope="col">到期本息</th><th scope="col">累計利息</th></tr></thead>
+              <tbody data-deposit-rows-out></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card card--flush" data-fx>
+          <div class="card__head"><h2>到期匯率變動試算</h2><span class="card__meta" data-out="scenarioMeta"></span></div>
+          <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="到期匯率變動試算，可捲動">
+            <table class="data-table data-table--summary data-table--scenario">
+              <thead><tr><th scope="col">到期匯率</th><th scope="col">相對目前</th><th scope="col">換回金額</th><th scope="col">總報酬</th><th scope="col">總報酬率</th><th scope="col">年化報酬率</th></tr></thead>
+              <tbody data-scenario-rows></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <p class="note">利息以月計算：本金 × 年利率 × 月數 ÷ 12，每筆四捨五入到小數兩位，實際依銀行的計息天數（每年 365 或 360 天）可能略有差異。本息續存時每筆到期的本金加利息全部存入下一筆；本金續存時利息領出、不再計息，最後與本金一起換回。投入成本是原來的金額依目前匯率換成換回貨幣；損益兩平匯率是換回後剛好拿回投入成本的到期匯率。未計利息所得稅、換匯手續費與銀行買賣匯差。</p>
+      <p class="note">匯率預設值僅為範例。線上匯率是公開匯率網站提供的參考匯率（買賣中間價），通常每天更新，與銀行牌告的買入、賣出匯率不同，實際換匯請以銀行報價為準。試算僅供參考。</p>
     </div>
   </section>
 
@@ -852,6 +940,36 @@
       <span class="field__hint" data-hint></span>
     </div>
     <button type="button" class="icon-btn" data-remove aria-label="刪除這筆提前還款">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+</template>
+
+<template id="tpl-deposit-row">
+  <div class="period-row deposit-row">
+    <div class="field">
+      <label data-for="term"><span data-no>第 1 筆</span>・存期</label>
+      <select class="input" name="depositTerm">
+        <option value="1">1 個月</option>
+        <option value="2">2 個月</option>
+        <option value="3">3 個月</option>
+        <option value="4">4 個月</option>
+        <option value="5">5 個月</option>
+        <option value="6">6 個月（半年）</option>
+        <option value="7">7 個月</option>
+        <option value="8">8 個月</option>
+        <option value="9">9 個月</option>
+        <option value="10">10 個月</option>
+        <option value="11">11 個月</option>
+        <option value="12">12 個月（1 年）</option>
+      </select>
+      <span class="field__hint" data-span></span>
+    </div>
+    <div class="field">
+      <label data-for="rate">年利率</label>
+      <div class="input-wrap"><input class="input" name="depositRate" inputmode="decimal"><span class="input-affix">%</span></div>
+    </div>
+    <button type="button" class="icon-btn" data-remove aria-label="刪除這筆定存">
       <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
   </div>

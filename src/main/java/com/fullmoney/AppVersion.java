@@ -7,7 +7,7 @@ public final class AppVersion {
 
 	public static final String NAME = "FullMoney 理財試算";
 
-	public static final String VERSION = "2.0.0";
+	public static final String VERSION = "2.1.0";
 
 	private AppVersion() {
 	}

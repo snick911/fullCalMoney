@@ -1182,15 +1182,314 @@
       + `<td>${twd(r[6])}</td><td>${fmt.percent(r[7])}</td></tr>`).join('');
   }
 
-  /* ---------- 幣別轉換 ---------- */
+  /* ---------- 貨幣投資：換匯、依序定存、以預估匯率換回 ---------- */
+  const signedPercentFormat = new Intl.NumberFormat('zh-TW', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' });
+  const signedPercent = (ratio) => (ratio == null ? NO_VALUE : signedPercentFormat.format(ratio));
+
+  /** 匯率取 6 位有效數字，不用科學記號 ex. 32.1235、0.00645161 */
+  const plainRate = (n) => (Number.isFinite(n) && n > 0
+    ? Number(n.toPrecision(6)).toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 10 }) : '');
+
+  /** 「1 USD 可換新台幣」、「1 AUD 可換 USD」 */
+  const exchangeTarget = (code) => (code === 'TWD' ? '新台幣' : ` ${code}`);
+
   function renderCurrency(d, scope) {
-    setOut(scope, 'result', `${d.to} ${fmt.amount(d.result, d.decimals)}`);
+    const money = (code, n) => `${code} ${fmt.amount(n, d.decimals)}`;
+    setOut(scope, 'result', money(d.to, d.result));
     setOut(scope, 'crossRate', `1 ${d.from} = ${d.crossRate} ${d.to}`);
+    $('[data-deposit-caption]', scope).textContent = `（本金為上方的轉換結果 ${money(d.to, d.result)}）`;
+
+    const dep = d.deposit;
+    $('[data-deposit-results]', scope).hidden = !dep;
+    $('[data-deposit-empty]', scope).hidden = Boolean(dep);
+    if (!dep) return;
+
+    const y = dep.currency;
+    const z = dep.settle;
+    const inY = (n) => money(y, n);
+    const inZ = (n) => money(z, n);
+    setOut(scope, 'cost', inZ(dep.cost));
+    setOut(scope, 'interest', inY(dep.interest));
+    setOut(scope, 'value', inZ(dep.value));
+    setOut(scope, 'profit', inZ(dep.profit));
+    setOut(scope, 'annualReturn', fmt.percentFixed(dep.annualReturn));
+    setOut(scope, 'totalReturn', fmt.percentFixed(dep.totalReturn));
+    setOut(scope, 'interestValue', inZ(dep.interestValue));
+    setOut(scope, 'exchangeGain', inZ(dep.exchangeGain));
+    setOut(scope, 'breakEvenRate', dep.breakEvenRate == null ? NO_VALUE : `1 ${y} = ${dep.breakEvenRate} ${z}`);
+    const profitTile = $('[data-profit-tile]', scope);
+    profitTile.classList.toggle('tile--loss', dep.profit < 0);
+    profitTile.classList.toggle('tile--gain', dep.profit > 0);
+    //換回貨幣與定存幣別相同時沒有匯率風險，不顯示匯兌損益與匯率變動試算
+    $$('[data-fx]', scope).forEach((el) => { el.hidden = dep.sameCurrency; });
+
+    const term = fmt.term(dep.months);
+    const returns = `總報酬 ${inZ(dep.profit)}（${fmt.percentFixed(dep.totalReturn)}，年化 ${fmt.percentFixed(dep.annualReturn)}）`;
+    const direction = (ratio) => (ratio == null || Math.abs(ratio) < 0.00005 ? '與目前相同'
+      : `${y} ${ratio > 0 ? '升值' : '貶值'} ${fmt.percentFixed(Math.abs(ratio))}`);
+    const points = [
+      `${d.from === d.to ? '' : `${money(d.from, d.amount)} 換成 `}${inY(dep.principal)}，依序存 ${dep.count} 筆定存、共 ${term}`
+        + `（${escapeHtml(dep.rolloverLabel)}），利息合計 ${inY(dep.interest)}，最後拿回 ${inY(dep.finalAmount)}。`,
+    ];
+    if (dep.sameCurrency) {
+      points.push(`本金與利息都以 ${y} 計算，不需換匯：投入 ${inY(dep.cost)}，${returns}。`);
+    } else {
+      points.push(`到期預估 1 ${y} = ${dep.estimateRate} ${z}（目前 ${dep.nowRate}，${direction(dep.estimateChange)}），`
+        + `換回 ${inZ(dep.value)}；投入成本 ${inZ(dep.cost)}，${returns}。`);
+      points.push(`總報酬中，利息收益 ${inZ(dep.interestValue)}，匯兌損益 ${inZ(dep.exchangeGain)}。`);
+      if (dep.breakEvenRate != null) {
+        const change = dep.breakEvenChange;
+        points.push(change < 0
+          ? `損益兩平匯率 1 ${y} = ${dep.breakEvenRate} ${z}：到期時 ${y} 比目前貶值 ${fmt.percentFixed(-change)} 以內，換回後不會虧損；貶值更多時，利息不足以抵銷匯損。`
+          : `損益兩平匯率 1 ${y} = ${dep.breakEvenRate} ${z}：到期時 ${y} 要比目前升值 ${fmt.percentFixed(change)} 以上，換回後才不會虧損。`);
+      }
+    }
+    $('[data-deposit-points]', scope).innerHTML = points.map((p) => `<li>${p}</li>`).join('');
+
+    setOut(scope, 'depositMeta', `金額單位 ${y}，共 ${dep.count} 筆、${term}`);
+    $('tbody[data-deposit-rows-out]', scope).innerHTML = dep.rows.map((r) =>
+      `<tr><td>${r[0]}</td><td>${r[1] === r[2] ? `第 ${r[1]} 個月` : `第 ${r[1]}～${r[2]} 個月`}</td><td>${fmt.term(r[3])}</td><td>${r[4]}%</td>`
+      + `<td>${fmt.amount(r[5], d.decimals)}</td><td class="is-accent">${fmt.amount(r[6], d.decimals)}</td>`
+      + `<td>${fmt.amount(r[7], d.decimals)}</td><td>${fmt.amount(r[8], d.decimals)}</td></tr>`).join('');
+
+    setOut(scope, 'scenarioMeta', `到期時 1 ${y} 可換多少 ${z}，目前 ${dep.nowRate}`);
+    $('tbody[data-scenario-rows]', scope).innerHTML = dep.scenarios.map((s) => {
+      const tags = [s.now && '目前匯率', s.estimate && '預估', s.breakEven && '損益兩平'].filter(Boolean)
+        .map((t) => `<span class="option__tag">${t}</span>`).join('');
+      const down = s.profit < 0 ? ' class="is-down"' : '';
+      return `<tr${s.estimate ? ' class="is-recommended"' : ''}><th scope="row">${s.rate}${tags}</th><td>${signedPercent(s.change)}</td>`
+        + `<td>${inZ(s.value)}</td><td${down}>${inZ(s.profit)}</td><td${down}>${fmt.percentFixed(s.totalReturn)}</td>`
+        + `<td${down}>${fmt.percentFixed(s.annualReturn)}</td></tr>`;
+    }).join('');
   }
 
-  /* ---------- 選項與範例匯率（由後端提供） ---------- */
+  /** 定存清單：一筆到期後接著存下一筆，每列為存期（1～12 個月）與年利率 */
+  const DEFAULT_DEPOSIT = { term: '12', rate: '3.5' };
+
+  function initDepositList(calculator) {
+    const rows = $('[data-deposit-rows]', calculator.form);
+    const addButton = $('[data-add-deposit]', calculator.form);
+    const template = $('#tpl-deposit-row');
+
+    /** 標示第幾筆與在第幾個月存入、到期 */
+    const renumber = () => {
+      let month = 0;
+      $$('.deposit-row', rows).forEach((row, i) => {
+        const term = Number($('select', row).value) || 0;
+        $('[data-no]', row).textContent = `第 ${i + 1} 筆`;
+        $('[data-span]', row).textContent = term === 1 ? `第 ${month + 1} 個月` : `第 ${month + 1}～${month + term} 個月`;
+        $('[data-remove]', row).setAttribute('aria-label', `刪除第 ${i + 1} 筆定存`);
+        month += term;
+      });
+      addButton.disabled = rows.children.length >= MAX_LIST_ROWS;
+    };
+
+    const createRow = (term, rate) => {
+      const row = template.content.firstElementChild.cloneNode(true);
+      $$('label[data-for]', row).forEach((label) => {
+        const input = $('.input', label.closest('.field'));
+        input.id = `deposit-${++rowSequence}`;
+        label.htmlFor = input.id;
+      });
+      if (term != null) $('select', row).value = term;
+      if (rate != null) $('input', row).value = rate;
+      rows.appendChild(row);
+      return row;
+    };
+
+    //新的一筆沿用上一筆的存期與利率
+    addButton.addEventListener('click', () => {
+      const last = rows.lastElementChild;
+      const row = last ? createRow($('select', last).value, $('input', last).value) : createRow(DEFAULT_DEPOSIT.term, DEFAULT_DEPOSIT.rate);
+      renumber();
+      $('select', row).focus();
+      calculator.edited();
+    });
+    rows.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-remove]');
+      if (!button) return;
+      button.closest('.deposit-row').remove();
+      renumber();
+      addButton.focus();
+      calculator.edited();
+    });
+    rows.addEventListener('change', renumber);
+
+    const reset = () => {
+      rows.replaceChildren();
+      createRow(DEFAULT_DEPOSIT.term, DEFAULT_DEPOSIT.rate);
+      renumber();
+    };
+    reset();
+    return {
+      reset,
+      renumber,
+      /** 還原時先建立空白列，數值由 applyForm 依序填入，填完再呼叫 renumber */
+      restore(count) {
+        rows.replaceChildren();
+        for (let i = 0; i < Math.min(count, MAX_LIST_ROWS); i++) createRow();
+        renumber();
+      },
+    };
+  }
+
+  /*
+   * ---------- 線上匯率 ----------
+   * 瀏覽器直接讀取公開的匯率網站（都允許跨網域讀取，GitHub Pages 也能用），只在按下「取得最新匯率」時連線。
+   * 取得的匯率保存在這台裝置（fm.rates），之後換幣別、恢復預設時都改用這組匯率。
+   * 伺服器版的 CSP 要允許相同的網址（Http.java 的 RATE_SOURCES）。
+   */
+  const RATE_SOURCES = [
+    {
+      id: 'er-api',
+      name: 'ExchangeRate-API',
+      site: 'https://www.exchangerate-api.com',
+      urls: ['https://open.er-api.com/v6/latest/TWD'],
+      parse(json) {
+        if (!json || json.result !== 'success' || !json.rates) throw new Error('format');
+        return { perTwd: json.rates, time: Number(json.time_last_update_unix) * 1000 };
+      },
+    },
+    {
+      id: 'currency-api',
+      name: 'Currency API（jsDelivr）',
+      site: 'https://github.com/fawazahmed0/exchange-api',
+      urls: ['https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/twd.json',
+        'https://latest.currency-api.pages.dev/v1/currencies/twd.json'],
+      parse(json) {
+        if (!json || !json.twd) throw new Error('format');
+        const perTwd = {};
+        Object.entries(json.twd).forEach(([code, value]) => { perTwd[code.toUpperCase()] = value; });
+        return { perTwd, time: Date.parse(`${json.date}T00:00:00Z`) };
+      },
+    },
+  ];
+  const RATES_KEY = 'fm.rates';
+  const RATE_SOURCE_KEY = 'fm.rateSource';
+  const FETCH_TIMEOUT_MS = 8000;
+  /** 與後端相同的匯率範圍（1 單位可換多少新台幣） */
+  const MIN_RATE = 0.0001;
+  const MAX_RATE = 100000;
+  const rateTimeFormat = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+
+  /* ---------- 選項與匯率：範例匯率由後端提供，線上取得的匯率優先 ---------- */
   const sampleRates = new Map();
-  const sampleRate = (code) => sampleRates.get(code) || '1';
+  const liveRates = new Map();
+  const rateFor = (code) => liveRates.get(code) || sampleRates.get(code) || '1';
+
+  /** 只留下支援的幣別與合理範圍內的匯率；格式不對時回傳 null */
+  function cleanRates(rates) {
+    if (!rates || typeof rates !== 'object') return null;
+    const clean = {};
+    sampleRates.forEach((sample, code) => {
+      const n = Number(rates[code]);
+      if (code !== 'TWD' && n >= MIN_RATE && n <= MAX_RATE) clean[code] = plainRate(n);
+    });
+    return Object.keys(clean).length ? clean : null;
+  }
+
+  /** 讀回上次取得的線上匯率，啟動時在各分頁設定預設匯率之前呼叫 */
+  function restoreLiveRates() {
+    let info = null;
+    try { info = JSON.parse(store.get(RATES_KEY)); } catch (e) { return null; }
+    const rates = info && cleanRates(info.rates);
+    if (!rates || !RATE_SOURCES.some((s) => s.id === info.source)) return null;
+    Object.entries(rates).forEach(([code, rate]) => liveRates.set(code, rate));
+    return { ...info, rates };
+  }
+
+  async function fetchJson(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** 依序嘗試來源的每個網址，換成「1 單位可換多少新台幣」 */
+  async function loadRates(source) {
+    let lastError = new Error('failed');
+    for (const url of source.urls) {
+      try {
+        const { perTwd, time } = source.parse(await fetchJson(url));
+        const inverted = {};
+        Object.entries(perTwd).forEach(([code, per]) => { if (Number(per) > 0) inverted[code] = 1 / Number(per); });
+        const rates = cleanRates(inverted);
+        if (!rates) throw new Error('empty');
+        return { rates, time: Number.isFinite(time) ? time : null };
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError;
+  }
+
+  /**
+   * 匯率來源選單、「取得最新匯率」按鈕與狀態文字
+   * @param apply 取得成功後呼叫，參數為 {幣別: 1 單位可換多少新台幣}
+   */
+  function initRateSource(section, saved, apply) {
+    const select = $('[data-rate-source]', section);
+    const button = $('[data-fetch-rates]', section);
+    const label = $('[data-fetch-label]', button);
+    const status = $('[data-rate-status]', section);
+    //選單在表單裡：設成 defaultSelected，按「恢復預設」時才不會跳回第一個來源
+    const savedSource = RATE_SOURCES.some((s) => s.id === store.get(RATE_SOURCE_KEY)) ? store.get(RATE_SOURCE_KEY) : RATE_SOURCES[0].id;
+    select.replaceChildren(...RATE_SOURCES.map((s) => new Option(s.name, s.id, s.id === savedSource, s.id === savedSource)));
+    select.addEventListener('change', () => {
+      store.set(RATE_SOURCE_KEY, select.value);
+      Array.from(select.options).forEach((option) => { option.defaultSelected = option.selected; });
+    });
+
+    //來源名稱連到該網站；全部用 textContent 組字
+    const showInfo = (prefix, info) => {
+      const source = RATE_SOURCES.find((s) => s.id === info.source);
+      const link = document.createElement('a');
+      link.href = source.site;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = source.name;
+      const time = info.time ? `（資料時間 ${rateTimeFormat.format(info.time)}）` : '';
+      status.classList.remove('is-error');
+      status.replaceChildren(prefix, link, ` 的參考匯率${time}，取得於 ${rateTimeFormat.format(info.fetchedAt)}。`);
+    };
+
+    if (saved) showInfo('上次取得：', saved);
+    else status.textContent = '目前為範例匯率，可直接輸入銀行的匯率，或按「取得最新匯率」線上讀取參考匯率。';
+
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      label.textContent = '取得中…';
+      const chosen = RATE_SOURCES.find((s) => s.id === select.value) || RATE_SOURCES[0];
+      const failed = [];
+      try {
+        //選的來源連不上時，自動改用其他來源
+        for (const source of [chosen, ...RATE_SOURCES.filter((s) => s !== chosen)]) {
+          try {
+            const { rates, time } = await loadRates(source);
+            const info = { source: source.id, time, fetchedAt: Date.now(), rates };
+            store.set(RATES_KEY, JSON.stringify(info));
+            liveRates.clear();
+            Object.entries(rates).forEach(([code, rate]) => liveRates.set(code, rate));
+            showInfo(failed.length ? `${failed.join('、')}無法連線，改用 ` : '已更新：', info);
+            apply(rates);
+            return;
+          } catch (e) {
+            failed.push(source.name);
+          }
+        }
+        status.classList.add('is-error');
+        status.textContent = '無法連線到匯率網站，請確認網路連線後再試，或直接輸入匯率。';
+      } finally {
+        button.disabled = false;
+        label.textContent = '取得最新匯率';
+      }
+    });
+  }
 
   function fillSelects(meta) {
     (meta.currencies || []).forEach((c) => sampleRates.set(c.code, String(c.sampleRate)));
@@ -1289,6 +1588,8 @@
       });
     }
     fillSelects(meta);
+    //上次線上取得的匯率要在各分頁設定預設匯率之前讀回
+    const savedRates = restoreLiveRates();
     showVersion(meta.version);
     watchForUpdate();
 
@@ -1308,7 +1609,7 @@
     pages.mortgage = mortgage;
 
     pages.bond = initBond();
-    pages.currency = initCurrency();
+    pages.currency = initCurrency(savedRates);
     pages.plan = initPlan(meta);
     pages.lottery = initLottery(meta);
     Object.values(pages).forEach((page) => page.restore());
@@ -1369,40 +1670,138 @@
       exchange.hidden = !foreign;
       exchange.disabled = !foreign;
       $('[data-rate-caption]', exchange).textContent = `（1 ${code} 可換多少新台幣）`;
-      if (applySample && foreign) $$('[data-rate]', exchange).forEach((input) => { input.value = sampleRate(code); });
+      if (applySample && foreign) $$('[data-rate]', exchange).forEach((input) => { input.value = rateFor(code); });
     };
-    $$('[data-rate]', exchange).forEach((input) => { input.defaultValue = sampleRate(currency.value); });
+    $$('[data-rate]', exchange).forEach((input) => { input.defaultValue = rateFor(currency.value); });
     currency.addEventListener('change', () => sync(true));
     sync(false);
     return new Calculator('bond', { render: renderBond, onReset: () => sync(false), afterRestore: () => sync(false) });
   }
 
-  function initCurrency() {
+  /**
+   * 貨幣投資：上方換匯（從 → 到），轉換結果依序定存，到期本息以預估匯率換回指定貨幣。
+   * 到期預估匯率預設跟著目前匯率（settleRateAuto=1），使用者自行輸入後就不再自動改變
+   */
+  function initCurrency(savedRates) {
+    const section = $('#page-currency');
     const from = $('#x-from');
     const to = $('#x-to');
+    const settle = $('#x-settle');
+    const fromRate = $('#x-from-rate');
+    const toRate = $('#x-to-rate');
+    const settleRate = $('#x-settle-rate');
+    const settleNow = $('#x-settle-now-rate');
+    const settleNowField = $('[data-settle-now-field]', section);
+    const useNow = $('[data-use-now]', section);
+
     //新台幣的匯率固定為 1，不開放修改
-    const sync = (select, applySample) => {
+    const syncRate = (select, applySample) => {
       const input = $(`[data-rate-for="${select.id}"]`);
       const code = select.value;
       if (code === 'TWD') input.value = '1';
-      else if (applySample) input.value = sampleRate(code);
+      else if (applySample) input.value = rateFor(code);
       input.disabled = code === 'TWD';
       $(`label[for="${input.id}"]`).textContent = `1 ${code} 可換新台幣`;
     };
-    [from, to].forEach((select) => {
-      $(`[data-rate-for="${select.id}"]`).defaultValue = sampleRate(select.value);
-      select.addEventListener('change', () => sync(select, true));
-      sync(select, false);
+    const syncBoth = () => { syncRate(from, false); syncRate(to, false); };
+
+    /** 1 單位該貨幣目前可換多少新台幣，讀取畫面上的匯率欄位 */
+    const twdRate = (code) => {
+      if (code === 'TWD') return 1;
+      if (code === from.value) return parseNumber(fromRate.value);
+      if (code === to.value) return parseNumber(toRate.value);
+      return parseNumber(settleNow.value);
+    };
+    /** 目前 1 單位定存幣別可換多少換回貨幣 */
+    const nowCross = () => {
+      const a = twdRate(to.value);
+      const b = twdRate(settle.value);
+      return a > 0 && b > 0 ? a / b : NaN;
+    };
+
+    let auto = null;
+    /** 換回貨幣：與定存幣別相同時不需匯率；不是原幣別、定存幣別或新台幣時，另外輸入它的目前匯率 */
+    const syncSettle = (applySample) => {
+      const y = to.value;
+      const z = settle.value;
+      const needNow = z !== 'TWD' && z !== from.value && z !== y;
+      settleNowField.hidden = !needNow;
+      settleNow.disabled = !needNow;
+      if (needNow && (applySample || !settleNow.value)) settleNow.value = rateFor(z);
+      $(`label[for="${settleNow.id}"]`).textContent = `目前 1 ${z} 可換新台幣`;
+
+      const same = z === y;
+      const now = nowCross();
+      settleRate.disabled = same;
+      $('[data-settle-rate-label]', section).textContent = same ? '到期預估匯率' : `到期 1 ${y} 可換${exchangeTarget(z)}`;
+      if (same) settleRate.value = '1';
+      else if (auto.value === '1' && Number.isFinite(now)) settleRate.value = plainRate(now);
+      $('[data-settle-now]', section).textContent = same ? '同一種貨幣，不需換匯' : (Number.isFinite(now) ? `目前 ${plainRate(now)}` : '');
+      useNow.hidden = same || auto.value === '1';
+    };
+
+    const calculator = new Calculator('currency', {
+      render: renderCurrency,
+      //隱藏欄位的 value 就是預設值，表單重設不會還原，要自己設回 1
+      onReset: () => {
+        syncBoth();
+        deposits.reset();
+        auto.value = '1';
+        syncSettle(true);
+      },
+      //舊版只有幣別轉換、沒有定存欄位時，保留預設的一筆定存
+      beforeRestore: (state) => {
+        if (countField(state, 'rollover') > 0) deposits.restore(countField(state, 'depositTerm'));
+      },
+      afterRestore: () => {
+        syncBoth();
+        deposits.renumber();
+        syncSettle(false);
+      },
     });
-    const syncBoth = () => { sync(from, false); sync(to, false); };
-    const calculator = new Calculator('currency', { render: renderCurrency, onReset: syncBoth, afterRestore: syncBoth });
-    $('[data-swap]').addEventListener('click', () => {
-      const fromRate = $('#x-from-rate');
-      const toRate = $('#x-to-rate');
+    auto = $('input[name="settleRateAuto"]', calculator.form);
+    const deposits = initDepositList(calculator);
+
+    [from, to].forEach((select) => {
+      $(`[data-rate-for="${select.id}"]`).defaultValue = rateFor(select.value);
+      select.addEventListener('change', () => {
+        syncRate(select, true);
+        auto.value = '1';
+        syncSettle(false);
+      });
+      syncRate(select, false);
+    });
+    settle.addEventListener('change', () => {
+      auto.value = '1';
+      syncSettle(true);
+    });
+    [fromRate, toRate, settleNow].forEach((input) => input.addEventListener('input', () => syncSettle(false)));
+    settleRate.addEventListener('input', () => {
+      auto.value = '0';
+      syncSettle(false);
+    });
+    useNow.addEventListener('click', () => {
+      auto.value = '1';
+      syncSettle(false);
+      calculator.run();
+    });
+    $('[data-swap]', section).addEventListener('click', () => {
       [from.value, to.value] = [to.value, from.value];
       [fromRate.value, toRate.value] = [toRate.value, fromRate.value];
-      sync(from, false);
-      sync(to, false);
+      syncBoth();
+      auto.value = '1';
+      syncSettle(false);
+      calculator.run();
+    });
+    syncSettle(false);
+
+    //線上取得匯率後，換掉畫面上外幣的目前匯率；到期預估匯率若仍跟著目前匯率也一起更新
+    initRateSource(section, savedRates, (rates) => {
+      [from, to].forEach((select) => {
+        if (rates[select.value]) $(`[data-rate-for="${select.id}"]`).value = rates[select.value];
+      });
+      if (!settleNow.disabled && rates[settle.value]) settleNow.value = rates[settle.value];
+      syncSettle(false);
       calculator.run();
     });
     return calculator;

@@ -20,12 +20,15 @@ final class Http {
 	/** 小於此大小時壓縮的效益不明顯 */
 	private static final int GZIP_MIN_BYTES = 1024;
 
+	/** 貨幣投資「取得最新匯率」由瀏覽器直接讀取的公開匯率來源，與 app.js 的 RATE_SOURCES 相同 */
+	private static final String RATE_SOURCES = "https://open.er-api.com https://cdn.jsdelivr.net https://latest.currency-api.pages.dev";
+
 	private static final String CONTENT_SECURITY_POLICY = String.join("; ",
 			"default-src 'self'",
 			"script-src 'self'",
 			"style-src 'self'",
 			"img-src 'self' data:",
-			"connect-src 'self'",
+			"connect-src 'self' " + RATE_SOURCES,
 			"base-uri 'none'",
 			"form-action 'self'",
 			"frame-ancestors 'none'",
