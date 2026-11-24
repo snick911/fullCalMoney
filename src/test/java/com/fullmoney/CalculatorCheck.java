@@ -196,15 +196,23 @@ public final class CalculatorCheck {
 	private static void deposit() {
 		TimeDepositCalculator calculator = new TimeDepositCalculator();
 		BigDecimal principal = new BigDecimal("31250.00");
-		List<TimeDeposit> deposits = List.of(new TimeDeposit(3, new BigDecimal("0.04")), new TimeDeposit(9, new BigDecimal("0.036")));
-		TimeDepositResult compound = calculator.calculate(principal, deposits, DepositRollover.COMPOUND);
+		List<TimeDeposit> deposits = List.of(new TimeDeposit(3, new BigDecimal("0.04"), DepositRollover.COMPOUND),
+				new TimeDeposit(9, new BigDecimal("0.036"), DepositRollover.PRINCIPAL));
+		TimeDepositResult compound = calculator.calculate(principal, deposits);
 		check("deposit first interest", "312.50", compound.getPeriods().get(0).getInterest().toPlainString());
 		check("deposit second principal", "31562.50", compound.getPeriods().get(1).getPrincipal().toPlainString());
-		check("deposit compound interest", "1164.69", compound.getTotalInterest().toPlainString());
+		check("deposit compound interest (last rollover ignored)", "1164.69", compound.getTotalInterest().toPlainString());
 		check("deposit months", 12, compound.getMonths());
 		check("deposit second span", "4-12", compound.getPeriods().get(1).getStartMonth() + "-" + compound.getPeriods().get(1).getEndMonth());
-		TimeDepositResult simple = calculator.calculate(principal, deposits, DepositRollover.PRINCIPAL);
+		TimeDepositResult simple = calculator.calculate(principal, List.of(new TimeDeposit(3, new BigDecimal("0.04"), DepositRollover.PRINCIPAL),
+				new TimeDeposit(9, new BigDecimal("0.036"), DepositRollover.COMPOUND)));
 		check("deposit principal-only interest", "1156.25", simple.getTotalInterest().toPlainString());
+		//每筆各自選：第 1 筆本金續存（領出 312.50）、第 2 筆本息續存，第 3 筆本金 31,562.50 × 4% × 6 ÷ 12 = 631.25
+		TimeDepositResult mixed = calculator.calculate(principal, List.of(new TimeDeposit(3, new BigDecimal("0.04"), DepositRollover.PRINCIPAL),
+				new TimeDeposit(3, new BigDecimal("0.04"), DepositRollover.COMPOUND), new TimeDeposit(6, new BigDecimal("0.04"), DepositRollover.PRINCIPAL)));
+		check("deposit mixed third principal", "31562.50", mixed.getPeriods().get(2).getPrincipal().toPlainString());
+		check("deposit mixed interest", "1256.25", mixed.getTotalInterest().toPlainString());
+		check("deposit mixed final amount", "32506.25", mixed.getFinalAmount().toPlainString());
 
 		//新台幣 100 萬以 32 換成 USD 31,250，到期以 31 換回：本金 968,750 + 利息 36,105.39
 		DepositReturn settled = calculator.settle(new BigDecimal("1000000.00"), compound, new BigDecimal("31"));
@@ -215,7 +223,7 @@ public final class CalculatorCheck {
 		check("deposit annual = total for 12 months", percent(settled.getTotalReturn()), percent(settled.getAnnualReturn()));
 		check("deposit break-even", "30.8502", calculator.breakEvenRate(new BigDecimal("1000000.00"), compound).setScale(4, RoundingMode.HALF_UP).toPlainString());
 		//半年賺 2%：年化 1.02² − 1 = 4.04%
-		TimeDepositResult half = calculator.calculate(new BigDecimal("100"), List.of(new TimeDeposit(6, new BigDecimal("0.04"))), DepositRollover.COMPOUND);
+		TimeDepositResult half = calculator.calculate(new BigDecimal("100"), List.of(new TimeDeposit(6, new BigDecimal("0.04"))));
 		check("deposit annualized half year", "4.04%", percent(calculator.settle(new BigDecimal("100"), half, BigDecimal.ONE).getAnnualReturn()));
 
 		String api = call("/api/currency", "amount=1%2C000%2C000&from=TWD&to=USD&toRate=32&depositTerm=3&depositRate=4&depositTerm=9&depositRate=3.6"
@@ -223,7 +231,18 @@ public final class CalculatorCheck {
 		check("deposit api interest", true, api.contains("\"interest\":1164.69,"));
 		check("deposit api value", true, api.contains("\"value\":1004855.39,"));
 		check("deposit api rates", true, api.contains("\"nowRate\":\"32\",\"estimateRate\":\"31\",") && api.contains("\"breakEvenRate\":\"30.8502\""));
-		check("deposit api row", true, api.contains("[2,4,12,9,\"3.6\",31562.50,852.19,32414.69,1164.69]"));
+		check("deposit api row", true, api.contains("[2,4,12,9,\"3.6\",31562.50,852.19,32414.69,1164.69,null,null]"));
+		check("deposit api first row rollover", true, api.contains(",312.50,\"COMPOUND\",\"本息續存\"]") && api.contains("\"rolloverText\":\"本息續存\""));
+		//每筆各自送續存方式；舊版的 rollover 只在沒有逐筆送出時當作預設
+		String perRow = call("/api/currency", "amount=1000000&from=TWD&to=USD&toRate=32&settleRate=31&rollover=COMPOUND"
+				+ "&depositTerm=3&depositRate=4&depositRollover=PRINCIPAL&depositTerm=3&depositRate=4&depositRollover=COMPOUND"
+				+ "&depositTerm=6&depositRate=4&depositRollover=PRINCIPAL");
+		check("deposit api per-row rollover", true, perRow.contains("\"interest\":1256.25,") && perRow.contains("\"rolloverText\":\"本息續存與本金續存混合\""));
+		String legacy = call("/api/currency", "amount=1000000&from=TWD&to=USD&toRate=32&settleRate=31&rollover=PRINCIPAL"
+				+ "&depositTerm=3&depositRate=4&depositTerm=9&depositRate=3.6");
+		check("deposit api legacy rollover", true, legacy.contains("\"interest\":1156.25,"));
+		String badRollover = call("/api/currency", "amount=1000&from=TWD&to=USD&toRate=32&settleRate=31&depositTerm=3&depositRate=4&depositRollover=NOPE");
+		check("deposit api bad rollover field", true, badRollover.contains("\"field\":\"depositRollover:0\""));
 		//目前匯率 ±3、5、10% 共 7 列，加上預估與損益兩平
 		check("deposit api scenarios", 9, api.split("\"rate\":").length - 1);
 		check("deposit api estimate once", 1, api.split("\"estimate\":true").length - 1);

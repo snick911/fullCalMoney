@@ -1195,6 +1195,7 @@
 
   function renderCurrency(d, scope) {
     const money = (code, n) => `${code} ${fmt.amount(n, d.decimals)}`;
+    setOut(scope, 'amount', money(d.from, d.amount));
     setOut(scope, 'result', money(d.to, d.result));
     setOut(scope, 'crossRate', `1 ${d.from} = ${d.crossRate} ${d.to}`);
     $('[data-deposit-caption]', scope).textContent = `（本金為上方的轉換結果 ${money(d.to, d.result)}）`;
@@ -1229,7 +1230,7 @@
       : `${y} ${ratio > 0 ? '升值' : '貶值'} ${fmt.percentFixed(Math.abs(ratio))}`);
     const points = [
       `${d.from === d.to ? '' : `${money(d.from, d.amount)} 換成 `}${inY(dep.principal)}，依序存 ${dep.count} 筆定存、共 ${term}`
-        + `（${escapeHtml(dep.rolloverLabel)}），利息合計 ${inY(dep.interest)}，最後拿回 ${inY(dep.finalAmount)}。`,
+        + `${dep.rolloverText ? `，到期後${escapeHtml(dep.rolloverText)}` : ''}，利息合計 ${inY(dep.interest)}，最後拿回 ${inY(dep.finalAmount)}。`,
     ];
     if (dep.sameCurrency) {
       points.push(`本金與利息都以 ${y} 計算，不需換匯：投入 ${inY(dep.cost)}，${returns}。`);
@@ -1250,7 +1251,8 @@
     $('tbody[data-deposit-rows-out]', scope).innerHTML = dep.rows.map((r) =>
       `<tr><td>${r[0]}</td><td>${r[1] === r[2] ? `第 ${r[1]} 個月` : `第 ${r[1]}～${r[2]} 個月`}</td><td>${fmt.term(r[3])}</td><td>${r[4]}%</td>`
       + `<td>${fmt.amount(r[5], d.decimals)}</td><td class="is-accent">${fmt.amount(r[6], d.decimals)}</td>`
-      + `<td>${fmt.amount(r[7], d.decimals)}</td><td>${fmt.amount(r[8], d.decimals)}</td></tr>`).join('');
+      + `<td>${fmt.amount(r[7], d.decimals)}</td><td>${fmt.amount(r[8], d.decimals)}</td>`
+      + `<td>${r[10] == null ? `換回 ${z}` : escapeHtml(r[10])}</td></tr>`).join('');
 
     setOut(scope, 'scenarioMeta', `到期時 1 ${y} 可換多少 ${z}，目前 ${dep.nowRate}`);
     $('tbody[data-scenario-rows]', scope).innerHTML = dep.scenarios.map((s) => {
@@ -1263,46 +1265,57 @@
     }).join('');
   }
 
-  /** 定存清單：一筆到期後接著存下一筆，每列為存期（1～12 個月）與年利率 */
-  const DEFAULT_DEPOSIT = { term: '12', rate: '3.5' };
+  /** 定存清單：一筆到期後接著存下一筆，每列為期數（1～12 個月）、年利率與到期後的續存方式 */
+  const DEFAULT_DEPOSIT = { term: '12', rate: '3.5', rollover: 'COMPOUND' };
 
   function initDepositList(calculator) {
     const rows = $('[data-deposit-rows]', calculator.form);
     const addButton = $('[data-add-deposit]', calculator.form);
     const template = $('#tpl-deposit-row');
+    const termOf = (row) => $('select[name="depositTerm"]', row);
+    const rateOf = (row) => $('input[name="depositRate"]', row);
+    const rolloverOf = (row) => $('select[name="depositRollover"]', row);
 
-    /** 標示第幾筆與在第幾個月存入、到期 */
+    /**
+     * 標示第幾筆與在第幾個月存入、到期；最後一筆到期後換回，續存選單換成「換回」
+     * （選單只是隱藏、仍會送出，後端忽略最後一筆的續存方式）
+     */
     const renumber = () => {
       let month = 0;
-      $$('.deposit-row', rows).forEach((row, i) => {
-        const term = Number($('select', row).value) || 0;
+      const list = $$('.deposit-row', rows);
+      list.forEach((row, i) => {
+        const term = Number(termOf(row).value) || 0;
+        const last = i === list.length - 1;
         $('[data-no]', row).textContent = `第 ${i + 1} 筆`;
         $('[data-span]', row).textContent = term === 1 ? `第 ${month + 1} 個月` : `第 ${month + 1}～${month + term} 個月`;
         $('[data-remove]', row).setAttribute('aria-label', `刪除第 ${i + 1} 筆定存`);
+        rolloverOf(row).hidden = last;
+        $('[data-end]', row).hidden = !last;
         month += term;
       });
-      addButton.disabled = rows.children.length >= MAX_LIST_ROWS;
+      addButton.disabled = list.length >= MAX_LIST_ROWS;
     };
 
-    const createRow = (term, rate) => {
+    const createRow = (values = {}) => {
       const row = template.content.firstElementChild.cloneNode(true);
       $$('label[data-for]', row).forEach((label) => {
         const input = $('.input', label.closest('.field'));
         input.id = `deposit-${++rowSequence}`;
         label.htmlFor = input.id;
       });
-      if (term != null) $('select', row).value = term;
-      if (rate != null) $('input', row).value = rate;
+      if (values.term != null) termOf(row).value = values.term;
+      if (values.rate != null) rateOf(row).value = values.rate;
+      if (values.rollover) rolloverOf(row).value = values.rollover;
       rows.appendChild(row);
       return row;
     };
 
-    //新的一筆沿用上一筆的存期與利率
+    //新的一筆加在清單最下方，沿用上一筆的期數、利率與續存方式
     addButton.addEventListener('click', () => {
       const last = rows.lastElementChild;
-      const row = last ? createRow($('select', last).value, $('input', last).value) : createRow(DEFAULT_DEPOSIT.term, DEFAULT_DEPOSIT.rate);
+      const row = createRow(last ? { term: termOf(last).value, rate: rateOf(last).value, rollover: rolloverOf(last).value } : DEFAULT_DEPOSIT);
       renumber();
-      $('select', row).focus();
+      termOf(row).focus();
       calculator.edited();
     });
     rows.addEventListener('click', (e) => {
@@ -1317,7 +1330,7 @@
 
     const reset = () => {
       rows.replaceChildren();
-      createRow(DEFAULT_DEPOSIT.term, DEFAULT_DEPOSIT.rate);
+      createRow(DEFAULT_DEPOSIT);
       renumber();
     };
     reset();
@@ -1329,6 +1342,13 @@
         rows.replaceChildren();
         for (let i = 0; i < Math.min(count, MAX_LIST_ROWS); i++) createRow();
         renumber();
+      },
+      /** 舊版（v2.1.0）只有一個共用的續存方式，套用到每一筆 */
+      setAllRollovers(value) {
+        $$('.deposit-row', rows).forEach((row) => {
+          const select = rolloverOf(row);
+          if (Array.from(select.options).some((o) => o.value === value)) select.value = value;
+        });
       },
     };
   }
@@ -1493,7 +1513,9 @@
 
   function fillSelects(meta) {
     (meta.currencies || []).forEach((c) => sampleRates.set(c.code, String(c.sampleRate)));
-    $$('select[data-options]').forEach((select) => {
+    //清單列範本（ex. 每筆定存的「到期後」）裡的選單也要填入，新增的列才有選項
+    const templateSelects = $$('template').flatMap((template) => $$('select[data-options]', template.content));
+    [...$$('select[data-options]'), ...templateSelects].forEach((select) => {
       const options = meta[select.dataset.options] || [];
       const preferred = select.dataset.default || (options[0] && options[0].code);
       const isCurrency = select.dataset.options === 'currencies';
@@ -1694,7 +1716,7 @@
     const settleNowField = $('[data-settle-now-field]', section);
     const useNow = $('[data-use-now]', section);
 
-    //新台幣的匯率固定為 1，不開放修改
+    //新台幣的匯率固定為 1，不開放修改；原幣金額標示「從」選的幣別
     const syncRate = (select, applySample) => {
       const input = $(`[data-rate-for="${select.id}"]`);
       const code = select.value;
@@ -1702,6 +1724,10 @@
       else if (applySample) input.value = rateFor(code);
       input.disabled = code === 'TWD';
       $(`label[for="${input.id}"]`).textContent = `1 ${code} 可換新台幣`;
+      if (select === from) {
+        $('[data-from-label]', section).textContent = select.selectedOptions[0] ? select.selectedOptions[0].text : code;
+        $('[data-from-code]', section).textContent = code;
+      }
     };
     const syncBoth = () => { syncRate(from, false); syncRate(to, false); };
 
@@ -1720,6 +1746,7 @@
     };
 
     let auto = null;
+    let legacyRollover = null;
     /** 換回貨幣：與定存幣別相同時不需匯率；不是原幣別、定存幣別或新台幣時，另外輸入它的目前匯率 */
     const syncSettle = (applySample) => {
       const y = to.value;
@@ -1749,12 +1776,19 @@
         auto.value = '1';
         syncSettle(true);
       },
-      //舊版只有幣別轉換、沒有定存欄位時，保留預設的一筆定存
+      //v2.0 只有幣別轉換、沒有定存欄位時，保留預設的一筆定存；v2.1.0 的續存方式是全部共用一個
       beforeRestore: (state) => {
-        if (countField(state, 'rollover') > 0) deposits.restore(countField(state, 'depositTerm'));
+        legacyRollover = null;
+        if (countField(state, 'settle') === 0) return;
+        deposits.restore(countField(state, 'depositTerm'));
+        if (countField(state, 'depositRollover') === 0) {
+          const shared = state.fields.find(([name]) => name === 'rollover');
+          if (shared) legacyRollover = shared[1];
+        }
       },
       afterRestore: () => {
         syncBoth();
+        if (legacyRollover) deposits.setAllRollovers(legacyRollover);
         deposits.renumber();
         syncSettle(false);
       },

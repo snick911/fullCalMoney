@@ -442,8 +442,8 @@
       </div>
       <div class="fields">
         <div class="field">
-          <label for="x-amount">金額</label>
-          <input class="input" id="x-amount" name="amount" data-kind="money" inputmode="decimal" value="1,000,000">
+          <label for="x-amount">原幣金額（<span data-from-label>TWD 新台幣</span>）</label>
+          <div class="input-wrap input-wrap--code"><input class="input" id="x-amount" name="amount" data-kind="money" inputmode="decimal" value="1,000,000"><span class="input-affix" data-from-code>TWD</span></div>
         </div>
       </div>
       <div class="exchange">
@@ -486,16 +486,12 @@
 
       <fieldset class="fieldset">
         <legend>定存 <span class="fieldset__hint" data-deposit-caption>（本金為上方的轉換結果）</span></legend>
-        <p class="sublist__desc">一筆到期後接著存下一筆，存期 1 個月到 1 年，每筆可設定不同的年利率。</p>
-        <div class="sublist__rows" data-deposit-rows></div>
+        <p class="sublist__desc">一筆到期後接著存下一筆，存期 1 個月到 1 年；每筆可設定不同的年利率，以及到期後本息續存或只續存本金。最後一筆到期後換回下方的換回貨幣。</p>
         <button type="button" class="btn btn--outline" data-add-deposit>
           <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新增定存
         </button>
+        <div class="deposit-rows" data-deposit-rows></div>
         <div class="fields fields--settings deposit-settle">
-          <div class="field">
-            <label for="x-rollover">到期後</label>
-            <select class="input" id="x-rollover" name="rollover" data-options="depositRollovers"></select>
-          </div>
           <div class="field">
             <label for="x-settle">換回貨幣</label>
             <select class="input" id="x-settle" name="settle" data-options="currencies" data-default="TWD"></select>
@@ -519,6 +515,7 @@
 
     <div class="results" data-results>
       <div class="tiles">
+        <div class="tile"><span class="tile__label">原幣金額</span><span class="tile__value" data-out="amount">—</span></div>
         <div class="tile"><span class="tile__label">轉換結果</span><span class="tile__value" data-out="result">—</span></div>
         <div class="tile"><span class="tile__label">換算匯率</span><span class="tile__value" data-out="crossRate">—</span></div>
       </div>
@@ -550,7 +547,7 @@
           <div class="card__head"><h2>定存明細</h2><span class="card__meta" data-out="depositMeta"></span></div>
           <div class="table-wrap" tabindex="0" aria-label="定存明細，可捲動">
             <table class="data-table">
-              <thead><tr><th scope="col">筆數</th><th scope="col">期間</th><th scope="col">存期</th><th scope="col">年利率</th><th scope="col">本金</th><th scope="col">利息</th><th scope="col">到期本息</th><th scope="col">累計利息</th></tr></thead>
+              <thead><tr><th scope="col">筆數</th><th scope="col">期間</th><th scope="col">存期</th><th scope="col">年利率</th><th scope="col">本金</th><th scope="col">利息</th><th scope="col">到期本息</th><th scope="col">累計利息</th><th scope="col">到期後</th></tr></thead>
               <tbody data-deposit-rows-out></tbody>
             </table>
           </div>
@@ -946,9 +943,10 @@
 </template>
 
 <template id="tpl-deposit-row">
-  <div class="period-row deposit-row">
-    <div class="field">
-      <label data-for="term"><span data-no>第 1 筆</span>・存期</label>
+  <div class="deposit-row">
+    <div class="deposit-row__title"><span><span data-no>第 1 筆</span>・存期</span> <span class="deposit-row__span" data-span>第 1～12 個月</span></div>
+    <div class="field deposit-row__term">
+      <label data-for="term">期數</label>
       <select class="input" name="depositTerm">
         <option value="1">1 個月</option>
         <option value="2">2 個月</option>
@@ -963,11 +961,16 @@
         <option value="11">11 個月</option>
         <option value="12">12 個月（1 年）</option>
       </select>
-      <span class="field__hint" data-span></span>
     </div>
-    <div class="field">
+    <div class="field deposit-row__rate">
       <label data-for="rate">年利率</label>
       <div class="input-wrap"><input class="input" name="depositRate" inputmode="decimal"><span class="input-affix">%</span></div>
+    </div>
+    <!-- 最後一筆到期後換回，不顯示續存選單（仍會送出，後端忽略） -->
+    <div class="field deposit-row__rollover">
+      <label data-for="rollover">到期後</label>
+      <select class="input" name="depositRollover" data-options="depositRollovers"></select>
+      <span class="deposit-row__end" data-end hidden>換回</span>
     </div>
     <button type="button" class="icon-btn" data-remove aria-label="刪除這筆定存">
       <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>

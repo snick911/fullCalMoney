@@ -13,7 +13,7 @@ import com.fullmoney.bean.TimeDepositPeriod;
 import com.fullmoney.bean.TimeDepositResult;
 
 /**
- * 依序定存：第 1 筆到期後接著存第 2 筆，以此類推；最後把本息以預估匯率換回指定貨幣計算總報酬
+ * 依序定存：第 1 筆到期後接著存第 2 筆，以此類推，每筆可以選本息續存或本金續存；最後把本息以預估匯率換回指定貨幣計算總報酬
  *
  * <p>利息以月計算：本金 × 年利率 × 月數 ÷ 12，每筆四捨五入到小數兩位。</p>
  */
@@ -23,19 +23,25 @@ public class TimeDepositCalculator {
 	private static final int MONEY_SCALE = 2;
 	private static final int MONTHS_PER_YEAR = 12;
 
-	public TimeDepositResult calculate(BigDecimal principal, List<TimeDeposit> deposits, DepositRollover rollover) {
+	/**
+	 * 每筆到期後依該筆的續存方式接續下一筆：本息續存時下一筆的本金 = 這一筆的本金 + 利息；
+	 * 本金續存時下一筆的本金與這一筆相同，利息領出不再計息。領出的利息最後與本金一起換回，
+	 * 所以最後拿回的金額一定是原來的本金 + 全部利息。
+	 */
+	public TimeDepositResult calculate(BigDecimal principal, List<TimeDeposit> deposits) {
 		List<TimeDepositPeriod> periods = new ArrayList<>(deposits.size());
-		BigDecimal balance = principal;
+		BigDecimal base = principal;
 		BigDecimal totalInterest = BigDecimal.ZERO;
 		int month = 0;
 		for (int i = 0; i < deposits.size(); i++) {
 			TimeDeposit deposit = deposits.get(i);
-			BigDecimal base = rollover == DepositRollover.COMPOUND ? balance : principal;
 			BigDecimal interest = interest(base, deposit.getAnnualRate(), deposit.getMonths());
 			totalInterest = totalInterest.add(interest);
 			periods.add(new TimeDepositPeriod(i + 1, month + 1, month + deposit.getMonths(), deposit.getMonths(), deposit.getAnnualRate(), base, interest,
-					totalInterest));
-			balance = base.add(interest);
+					totalInterest, deposit.getRollover()));
+			if (deposit.getRollover() == DepositRollover.COMPOUND) {
+				base = base.add(interest);
+			}
 			month += deposit.getMonths();
 		}
 		return new TimeDepositResult(periods, principal, totalInterest, month);

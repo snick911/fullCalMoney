@@ -20,9 +20,11 @@ public class TimeDepositPeriod {
 	private final BigDecimal interest;
 	/** 到這一筆為止的利息合計 */
 	private final BigDecimal cumulativeInterest;
+	/** 到期後接續下一筆的方式 */
+	private final DepositRollover rollover;
 
 	public TimeDepositPeriod(int index, int startMonth, int endMonth, int months, BigDecimal annualRate, BigDecimal principal, BigDecimal interest,
-			BigDecimal cumulativeInterest) {
+			BigDecimal cumulativeInterest, DepositRollover rollover) {
 		this.index = index;
 		this.startMonth = startMonth;
 		this.endMonth = endMonth;
@@ -31,6 +33,11 @@ public class TimeDepositPeriod {
 		this.principal = principal;
 		this.interest = interest;
 		this.cumulativeInterest = cumulativeInterest;
+		this.rollover = rollover;
+	}
+
+	public DepositRollover getRollover() {
+		return rollover;
 	}
 
 	public int getIndex() {

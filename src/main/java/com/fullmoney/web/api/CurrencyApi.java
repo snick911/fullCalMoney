@@ -26,10 +26,12 @@ import com.fullmoney.web.Params;
  *
  * <p>參數：amount 金額、from / to 幣別、fromRate / toRate 1 單位該幣別可換多少新台幣（新台幣固定為 1，不必送出）、
  * round=1 結果四捨五入到整數（不送出時到小數兩位）</p>
- * <p>定存（選填）：depositTerm 存期（月，1～12）與 depositRate 年利率(%) 成對重複送出，依送出順序接續；
- * rollover 續存方式、settle 換回的貨幣（預設同 from）、settleRate 到期預估匯率（1 單位 to 可換多少 settle，settle 與 to 相同時不必送出）、
+ * <p>定存（選填）：depositTerm 存期（月，1～12）、depositRate 年利率(%)、depositRollover 到期後的續存方式 每筆一組重複送出，依送出順序接續
+ * （沒送 depositRollover 時每筆都用 rollover，預設本息續存）；settle 換回的貨幣（預設同 from）、
+ * settleRate 到期預估匯率（1 單位 to 可換多少 settle，settle 與 to 相同時不必送出）、
  * settleNowRate settle 目前 1 單位可換多少新台幣（只有 settle 不是 from、to 或新台幣時需要）</p>
- * <p>deposit.rows 每列為 [第幾筆, 開始月, 到期月, 存期(月), 年利率(%), 本金, 利息, 到期本息, 累計利息]，金額為定存幣別</p>
+ * <p>deposit.rows 每列為 [第幾筆, 開始月, 到期月, 存期(月), 年利率(%), 本金, 利息, 到期本息, 累計利息, 續存方式代碼, 續存方式名稱]，
+ * 金額為定存幣別；最後一筆到期後換回，續存方式為 null</p>
  */
 public final class CurrencyApi extends ApiEndpoint {
 
@@ -87,7 +89,6 @@ public final class CurrencyApi extends ApiEndpoint {
 		if (deposits.isEmpty()) {
 			return null;
 		}
-		DepositRollover rollover = params.choice("rollover", "續存方式", DepositRollover.values(), DepositRollover.COMPOUND);
 		CurrencyType settle = params.choice("settle", "換回貨幣", CurrencyType.values(), from);
 		boolean same = settle == to;
 		BigDecimal settleNowRate = settleNowRate(params, settle, from, to, fromRate, toRate);
@@ -96,15 +97,18 @@ public final class CurrencyApi extends ApiEndpoint {
 		BigDecimal estimateRate = same ? BigDecimal.ONE : params.decimal("settleRate", "到期預估匯率", MIN_CROSS_RATE, MAX_CROSS_RATE);
 		BigDecimal cost = (settle == from ? amount : amount.multiply(fromRate).divide(settleNowRate, PRECISION)).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
 
-		TimeDepositResult result = depositCalculator.calculate(principal, deposits, rollover);
+		TimeDepositResult result = depositCalculator.calculate(principal, deposits);
 		DepositReturn estimate = depositCalculator.settle(cost, result, estimateRate);
 		BigDecimal breakEven = same ? null : depositCalculator.breakEvenRate(cost, result);
 
 		List<Object[]> rows = new ArrayList<>(result.getPeriods().size());
 		for (TimeDepositPeriod period : result.getPeriods()) {
+			//最後一筆到期後換回，續存方式不影響結果
+			DepositRollover rollover = period.getIndex() == deposits.size() ? null : period.getRollover();
 			rows.add(new Object[] { period.getIndex(), period.getStartMonth(), period.getEndMonth(), period.getMonths(),
 					period.getAnnualRate().movePointRight(2).stripTrailingZeros().toPlainString(), Values.money(period.getPrincipal(), whole),
-					Values.money(period.getInterest(), whole), Values.money(period.getMaturity(), whole), Values.money(period.getCumulativeInterest(), whole) });
+					Values.money(period.getInterest(), whole), Values.money(period.getMaturity(), whole), Values.money(period.getCumulativeInterest(), whole),
+					rollover == null ? null : rollover.name(), rollover == null ? null : rollover.getLabel() });
 		}
 
 		Map<String, Object> out = new LinkedHashMap<>();
@@ -113,8 +117,7 @@ public final class CurrencyApi extends ApiEndpoint {
 		out.put("settle", settle.name());
 		out.put("settleLabel", settle.getLabel());
 		out.put("sameCurrency", same);
-		out.put("rollover", rollover.name());
-		out.put("rolloverLabel", rollover.getLabel());
+		out.put("rolloverText", rolloverText(deposits));
 		out.put("count", deposits.size());
 		out.put("months", result.getMonths());
 		out.put("principal", Values.money(result.getPrincipal(), whole));
@@ -135,20 +138,52 @@ public final class CurrencyApi extends ApiEndpoint {
 	private static List<TimeDeposit> deposits(Params params) {
 		List<String> terms = params.list("depositTerm");
 		List<String> rates = params.list("depositRate");
-		if (terms.size() != rates.size()) {
-			throw new BadRequestException(null, "定存的存期與年利率筆數不一致。");
+		List<String> rollovers = params.list("depositRollover");
+		if (terms.size() != rates.size() || (!rollovers.isEmpty() && rollovers.size() != terms.size())) {
+			throw new BadRequestException(null, "定存的存期、年利率與續存方式筆數不一致。");
 		}
 		if (terms.size() > MAX_DEPOSITS) {
 			throw new BadRequestException(null, "定存最多 " + MAX_DEPOSITS + " 筆。");
 		}
+		DepositRollover fallback = params.choice("rollover", "續存方式", DepositRollover.values(), DepositRollover.COMPOUND);
 		List<TimeDeposit> deposits = new ArrayList<>(terms.size());
 		for (int i = 0; i < terms.size(); i++) {
 			String prefix = "第 " + (i + 1) + " 筆定存的";
 			int months = Params.toInteger(terms.get(i), "depositTerm:" + i, prefix + "存期", 1, MAX_TERM);
 			BigDecimal rate = Params.toDecimal(rates.get(i), "depositRate:" + i, prefix + "年利率", BigDecimal.ZERO, new BigDecimal("100"));
-			deposits.add(new TimeDeposit(months, rate.movePointLeft(2)));
+			DepositRollover rollover = rollovers.isEmpty() ? fallback : rollover(rollovers.get(i), i, fallback);
+			deposits.add(new TimeDeposit(months, rate.movePointLeft(2), rollover));
 		}
 		return deposits;
+	}
+
+	/** 不用 Enum.valueOf，瀏覽器端引擎才不需要反射 */
+	private static DepositRollover rollover(String raw, int index, DepositRollover fallback) {
+		if (raw == null || raw.isBlank()) {
+			return fallback;
+		}
+		for (DepositRollover rollover : DepositRollover.values()) {
+			if (rollover.name().equals(raw.trim())) {
+				return rollover;
+			}
+		}
+		throw new BadRequestException("depositRollover:" + index, "第 " + (index + 1) + " 筆定存到期後的選項不正確。");
+	}
+
+	/**
+	 * @return 摘要用的續存方式：只有一筆時為 null（到期直接換回），其餘各筆相同時為該方式，不同時說明混合
+	 */
+	private static String rolloverText(List<TimeDeposit> deposits) {
+		if (deposits.size() < 2) {
+			return null;
+		}
+		DepositRollover first = deposits.get(0).getRollover();
+		for (int i = 1; i < deposits.size() - 1; i++) {
+			if (deposits.get(i).getRollover() != first) {
+				return "本息續存與本金續存混合";
+			}
+		}
+		return first.getLabel();
 	}
 
 	/**
