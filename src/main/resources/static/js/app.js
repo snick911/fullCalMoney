@@ -1362,7 +1362,7 @@
   const RATE_SOURCES = [
     {
       id: 'er-api',
-      name: 'ExchangeRate-API',
+      name: '國際匯率服務（ExchangeRate-API）',
       site: 'https://www.exchangerate-api.com',
       urls: ['https://open.er-api.com/v6/latest/TWD'],
       parse(json) {
@@ -1372,7 +1372,7 @@
     },
     {
       id: 'currency-api',
-      name: 'Currency API（jsDelivr）',
+      name: '開源匯率資料（Currency API）',
       site: 'https://github.com/fawazahmed0/exchange-api',
       urls: ['https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/twd.json',
         'https://latest.currency-api.pages.dev/v1/currencies/twd.json'],
@@ -1475,7 +1475,7 @@
       link.textContent = source.name;
       const time = info.time ? `（資料時間 ${rateTimeFormat.format(info.time)}）` : '';
       status.classList.remove('is-error');
-      status.replaceChildren(prefix, link, ` 的參考匯率${time}，取得於 ${rateTimeFormat.format(info.fetchedAt)}。`);
+      status.replaceChildren(prefix, link, `的參考匯率${time}，取得於 ${rateTimeFormat.format(info.fetchedAt)}。`);
     };
 
     if (saved) showInfo('上次取得：', saved);
@@ -1495,7 +1495,7 @@
             store.set(RATES_KEY, JSON.stringify(info));
             liveRates.clear();
             Object.entries(rates).forEach(([code, rate]) => liveRates.set(code, rate));
-            showInfo(failed.length ? `${failed.join('、')}無法連線，改用 ` : '已更新：', info);
+            showInfo(failed.length ? `${failed.join('、')}無法連線，改用` : '已更新：', info);
             apply(rates);
             return;
           } catch (e) {

@@ -292,7 +292,7 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 5. **損益兩平匯率** = 投入成本 ÷ 到期本息，到期匯率高於它就不會虧損。
 6. **到期匯率變動試算**：目前匯率 −10%、−5%、−3%、0、+3%、+5%、+10%，加上預估匯率與損益兩平匯率，由低到高列出換回金額與報酬；相差不到百萬分之一的匯率合併成一列。換回貨幣與定存幣別相同時沒有匯率風險，不列這張表。
 7. 網頁的「到期預估匯率」預設跟著目前匯率，自行輸入後就不再自動改變，按「帶入目前匯率」可恢復。
-8. **線上匯率**：按「取得最新匯率」時由瀏覽器直接讀取 [ExchangeRate-API](https://www.exchangerate-api.com)（`open.er-api.com`）或 [Currency API](https://github.com/fawazahmed0/exchange-api)（jsDelivr，連不上時改用 `currency-api.pages.dev`），兩者都免金鑰、允許跨網域讀取，所以 GitHub Pages 版也能用；選的來源連不上時自動改用另一個。讀到的是「1 新台幣可換多少外幣」，換成「1 外幣可換多少新台幣」並取 6 位有效數字，填入畫面上的匯率，之後換幣別或恢復預設時也用這組匯率（債券計算也是）。這是買賣中間價的參考匯率，與銀行牌告的買入、賣出匯率不同。
+8. **線上匯率**：按「取得最新匯率」時由瀏覽器直接讀取「國際匯率服務」[ExchangeRate-API](https://www.exchangerate-api.com)（`open.er-api.com`）或「開源匯率資料」[Currency API](https://github.com/fawazahmed0/exchange-api)（jsDelivr，連不上時改用 `currency-api.pages.dev`），兩者都免金鑰、允許跨網域讀取，所以 GitHub Pages 版也能用；選的來源連不上時自動改用另一個。讀到的是「1 新台幣可換多少外幣」，換成「1 外幣可換多少新台幣」並取 6 位有效數字，填入畫面上的匯率，之後換幣別或恢復預設時也用這組匯率（債券計算也是）。這是買賣中間價的參考匯率，與銀行牌告的買入、賣出匯率不同。
 9. 未計入：利息所得稅、換匯手續費、銀行買賣匯差、依實際天數（365 或 360 天）計息的差異。
 
 ## 新增主題色系
