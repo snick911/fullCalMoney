@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FullMoney 理財試算</title>
-<meta name="description" content="複利試算、房貸計算、債券報酬、貨幣投資（換匯與外幣定存）、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
+<meta name="description" content="複利試算、房貸計算、債券報酬、貨幣投資（換匯與外幣定存）、基金 ETF 股票定期定額、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
 <meta name="theme-color" content="#F2F3F5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- 部署到 GitHub Pages 時，"local" 會換成提交編號，檔案網址每版不同，瀏覽器就不會讀到舊檔 -->
@@ -43,6 +43,7 @@
       <a class="tab" href="#mortgage" data-page="mortgage">房貸計算</a>
       <a class="tab" href="#bond" data-page="bond">債券計算</a>
       <a class="tab" href="#currency" data-page="currency">貨幣投資</a>
+      <a class="tab" href="#dca" data-page="dca">定期定額</a>
       <a class="tab" href="#plan" data-page="plan">投資計畫</a>
       <a class="tab" href="#lottery" data-page="lottery">樂透投資</a>
     </div>
@@ -566,6 +567,164 @@
 
       <p class="note">利息以月計算：本金 × 年利率 × 月數 ÷ 12，每筆四捨五入到小數兩位，實際依銀行的計息天數（每年 365 或 360 天）可能略有差異。本息續存時每筆到期的本金加利息全部存入下一筆；本金續存時利息領出、不再計息，最後與本金一起換回。投入成本是原來的金額依目前匯率換成換回貨幣；損益兩平匯率是換回後剛好拿回投入成本的到期匯率。未計利息所得稅、換匯手續費與銀行買賣匯差。</p>
       <p class="note">匯率預設值僅為範例。線上匯率是公開匯率網站提供的參考匯率（買賣中間價），通常每天更新，與銀行牌告的買入、賣出匯率不同，實際換匯請以銀行報價為準。試算僅供參考。</p>
+    </div>
+  </section>
+
+  <!-- 定期定額：基金、ETF、股票每隔固定月數投入，每期金額與年化報酬率都可輸入區間 -->
+  <section class="page" id="page-dca" data-page="dca" aria-labelledby="h-dca" hidden>
+    <div class="page__head">
+      <h1 id="h-dca">定期定額</h1>
+      <p class="page__desc">適用於基金、ETF 與股票：每隔固定月數投入一筆錢，輸入每期投資金額與預估年化報酬率的區間，算出保守、中間、樂觀三種情境的期末市值、獲利，以及扣除買賣費用後的實際年化報酬率。</p>
+    </div>
+
+    <form class="card" novalidate autocomplete="off" data-endpoint="/api/dca">
+      <div class="card__head">
+        <h2>試算條件</h2>
+        <button type="reset" class="btn btn--ghost">恢復預設</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="d-target">標的類型</label>
+          <select class="input" id="d-target" name="target" data-options="dcaTargets" data-default="ETF"></select>
+          <span class="field__hint" data-target-hint></span>
+        </div>
+        <div class="field">
+          <label for="d-interval">多久投入一次</label>
+          <select class="input" id="d-interval" name="interval">
+            <option value="1" selected>每月</option>
+            <option value="2">每 2 個月</option>
+            <option value="3">每季（3 個月）</option>
+            <option value="4">每 4 個月</option>
+            <option value="5">每 5 個月</option>
+            <option value="6">每半年（6 個月）</option>
+            <option value="7">每 7 個月</option>
+            <option value="8">每 8 個月</option>
+            <option value="9">每 9 個月</option>
+            <option value="10">每 10 個月</option>
+            <option value="11">每 11 個月</option>
+            <option value="12">每年（12 個月）</option>
+          </select>
+          <span class="field__hint" data-interval-hint></span>
+        </div>
+        <div class="field">
+          <label for="d-years">投資年數</label>
+          <div class="input-wrap"><input class="input" id="d-years" name="years" inputmode="numeric" value="10"><span class="input-affix">年</span></div>
+        </div>
+      </div>
+      <div class="ranges">
+        <fieldset class="range">
+          <legend>每期投資金額 <span class="range__hint">（以最低、中間、最高試算）</span></legend>
+          <div class="range__inputs">
+            <div class="field">
+              <label for="d-amount-min">最低</label>
+              <div class="input-wrap"><input class="input" id="d-amount-min" name="amountMin" data-kind="money" inputmode="numeric" value="5,000"><span class="input-affix">元</span></div>
+              <span class="field__hint" data-hint></span>
+            </div>
+            <span class="range__sep" aria-hidden="true">～</span>
+            <div class="field">
+              <label for="d-amount-max">最高</label>
+              <div class="input-wrap"><input class="input" id="d-amount-max" name="amountMax" data-kind="money" inputmode="numeric" value="10,000"><span class="input-affix">元</span></div>
+              <span class="field__hint" data-hint></span>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="range">
+          <legend>預估年化報酬率 <span class="range__hint">（含配息再投入，可輸入負數）</span></legend>
+          <div class="range__inputs">
+            <div class="field">
+              <label for="d-rate-min">最低</label>
+              <div class="input-wrap"><input class="input" id="d-rate-min" name="rateMin" inputmode="decimal" value="4"><span class="input-affix">%</span></div>
+            </div>
+            <span class="range__sep" aria-hidden="true">～</span>
+            <div class="field">
+              <label for="d-rate-max">最高</label>
+              <div class="input-wrap"><input class="input" id="d-rate-max" name="rateMax" inputmode="decimal" value="10"><span class="input-affix">%</span></div>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+      <fieldset class="fieldset">
+        <legend>費用 <span class="fieldset__hint">（換標的類型時帶入常見費率，可自行修改）</span></legend>
+        <div class="fields">
+          <div class="field">
+            <label for="d-buy-fee">買入手續費</label>
+            <div class="input-wrap"><input class="input" id="d-buy-fee" name="buyFee" inputmode="decimal" value="0.1425"><span class="input-affix">%</span></div>
+            <span class="field__hint" data-fee-hint></span>
+          </div>
+          <div class="field">
+            <label for="d-min-fee">每筆最低手續費</label>
+            <div class="input-wrap"><input class="input" id="d-min-fee" name="minFee" inputmode="decimal" value="1"><span class="input-affix">元</span></div>
+          </div>
+          <div class="field">
+            <label for="d-sell-fee">期末賣出費用</label>
+            <div class="input-wrap"><input class="input" id="d-sell-fee" name="sellFee" inputmode="decimal" value="0.2425"><span class="input-affix">%</span></div>
+            <span class="field__hint">期末全部賣出時的手續費加交易稅</span>
+          </div>
+        </div>
+      </fieldset>
+      <label class="check"><input type="checkbox" name="round" value="1" checked><span>金額不顯示小數（四捨五入）</span></label>
+      <p class="form-alert" role="alert" hidden></p>
+    </form>
+
+    <div class="results" data-results>
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">總投入<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="cost">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label">期末市值<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="value">—</span></div>
+        <div class="tile" data-range-tile><span class="tile__label">期末市值（保守～樂觀）</span><span class="tile__value" data-out="valueRange">—</span></div>
+        <div class="tile" data-profit-tile><span class="tile__label">獲利<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="profit">—</span></div>
+        <div class="tile"><span class="tile__label">實際年化報酬率</span><span class="tile__value" data-out="irr">—</span></div>
+      </div>
+      <div class="tiles tiles--secondary">
+        <div class="tile"><span class="tile__label">投入次數</span><span class="tile__value" data-out="count">—</span></div>
+        <div class="tile"><span class="tile__label">總報酬率<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="totalReturn">—</span></div>
+        <div class="tile"><span class="tile__label">買入手續費合計<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="fees">—</span></div>
+        <div class="tile"><span class="tile__label">期末賣出費用<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="sellCost">—</span></div>
+      </div>
+
+      <article class="advice" aria-labelledby="dca-advice-title">
+        <div class="advice__head">
+          <h2 class="advice__title" id="dca-advice-title">試算結果</h2>
+        </div>
+        <ul class="advice__list" data-dca-points></ul>
+      </article>
+
+      <div class="card card--flush" data-scenario-card>
+        <div class="card__head"><h2>情境比較</h2><span class="card__meta">保守：最低金額與最低報酬率；樂觀：最高金額與最高報酬率</span></div>
+        <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="情境比較，可捲動">
+          <table class="data-table data-table--summary">
+            <thead><tr><th scope="col">情境</th><th scope="col">每期投資</th><th scope="col">年化報酬率</th><th scope="col">總投入</th><th scope="col">期末市值</th><th scope="col">獲利</th><th scope="col">總報酬率</th><th scope="col">賣出後拿回</th><th scope="col">實際年化報酬率</th></tr></thead>
+            <tbody data-scenario-rows></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card card--flush" data-matrix-card>
+        <div class="card__head"><h2>期末市值對照表</h2><span class="card__meta" data-out="matrixMeta"></span></div>
+        <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="期末市值對照表，可捲動">
+          <table class="data-table data-table--summary">
+            <thead data-matrix-head></thead>
+            <tbody data-matrix-rows></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card chart-card dca-chart">
+        <div class="card__head"><h2>累積市值走勢</h2><span class="card__meta" data-out="chartMeta"></span></div>
+        <div class="chart-legend" data-dca-legend></div>
+        <div class="chart" data-dca-chart></div>
+      </div>
+
+      <div class="card card--flush">
+        <div class="card__head"><h2>逐年明細</h2><span class="card__meta" data-out="rowsMeta"></span></div>
+        <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
+          <table class="data-table">
+            <thead data-year-head></thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="note">第 1 個月月初投入第一筆，之後每隔設定的月數投入一次，最後一筆在期滿前；每筆投入的市值 = 投入金額 ×（1 + 年化報酬率）^（持有月數 ÷ 12）。年化報酬率是整段期間的平均假設，請以含配息再投入的總報酬估算；基金的經理費、ETF 的內扣費用已反映在淨值與股價中，不另外扣除。實際每年有漲有跌，下跌時同樣的金額買到較多單位數，結果會與固定報酬率的試算不同。</p>
+      <p class="note">買入手續費外加在每期投資金額上（投資金額全部買進），每次為投資金額 × 費率，不足最低手續費時以最低手續費計；期末賣出費用 = 期末市值 × 費率。總投入 = 本金 + 買入手續費，獲利 = 期末市值 − 總投入。實際年化報酬率是讓每次付出的錢（含手續費）在期末剛好等於賣出後拿回金額的報酬率，沒有任何費用時等於預估的年化報酬率。未計股利所得稅、二代健保補充保費與匯率變動，試算僅供參考。</p>
     </div>
   </section>
 

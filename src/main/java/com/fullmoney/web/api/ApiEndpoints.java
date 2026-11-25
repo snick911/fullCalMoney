@@ -14,7 +14,7 @@ public final class ApiEndpoints {
 	}
 
 	public static List<ApiEndpoint> all() {
-		return Arrays.asList(new MetaApi(), new CompoundApi(), new FloatingCompoundApi(), new MortgageApi(), new BondApi(), new CurrencyApi(), new PlanApi(),
-				new LotteryApi());
+		return Arrays.asList(new MetaApi(), new CompoundApi(), new FloatingCompoundApi(), new MortgageApi(), new BondApi(), new CurrencyApi(), new DcaApi(),
+				new PlanApi(), new LotteryApi());
 	}
 }

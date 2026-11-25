@@ -743,6 +743,14 @@ select.input option { background: var(--surface); color: var(--fg); }
 .results__group { display: flex; flex-direction: column; gap: 1rem; }
 .tile--gain .tile__value { color: var(--accent); }
 
+/* 定期定額：期末市值區間的兩端各自不斷行；走勢圖中間情境實線、保守～樂觀區間帶與上下緣虛線，都用主題色 */
+.tile__part { white-space: nowrap; }
+.dca-chart { --profile-color: var(--accent); }
+.chart .chart__band { fill: var(--accent); opacity: .13; }
+.chart .chart__edge { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; opacity: .75; }
+.legend-band { display: inline-block; flex: none; width: .9rem; height: .65rem; border-radius: 2px; background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.legend-line.legend-line--edge { border-top: 1px dashed var(--accent); }
+
 /* ---------- 頁尾 ---------- */
 .footer {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem 1.5rem;

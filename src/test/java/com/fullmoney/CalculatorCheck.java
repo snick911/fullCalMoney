@@ -43,6 +43,7 @@ import com.fullmoney.service.CashFlows;
 import com.fullmoney.service.CurrencyConverter;
 import com.fullmoney.service.FloatingMoneyCalculator;
 import com.fullmoney.service.InvestmentPlanner;
+import com.fullmoney.service.DcaCalculator;
 import com.fullmoney.service.LotteryCalculator;
 import com.fullmoney.service.MarketSimulator;
 import com.fullmoney.service.RangeRandom;
@@ -78,6 +79,7 @@ public final class CalculatorCheck {
 		bond();
 		currency();
 		lottery();
+		dca();
 		params();
 		json();
 		endpoints();
@@ -344,6 +346,55 @@ public final class CalculatorCheck {
 
 	private static String lottery(String query) {
 		return call("/api/lottery", query);
+	}
+
+	/** 定期定額：投入次數、終值公式、手續費與內部報酬率 */
+	private static void dca() {
+		check("dca count monthly", 120, DcaCalculator.count(120, 1));
+		check("dca count every 5 months", 3, DcaCalculator.count(12, 5));
+		check("dca count yearly", 2, DcaCalculator.count(24, 12));
+		check("dca min fee", true, DcaCalculator.fee(500, 0.001425, 1) == 1);
+		check("dca rate fee", true, Math.abs(DcaCalculator.fee(10000, 0.001425, 1) - 14.25) < 1e-9);
+		//每月 1,000 元 1 年：等比級數 1000 × g × (g^12 − 1) ÷ (g − 1)，g 為月成長率
+		double g = Math.pow(1.12, 1.0 / 12);
+		check("dca monthly closed form", true, Math.abs(DcaCalculator.futureValue(1000, 1, 12, 0.12) - 1000 * g * (Math.pow(g, 12) - 1) / (g - 1)) < 1e-6);
+		//每年 10,000 元、年報酬 10%、2 年，買入手續費 1%：10,100x² + 10,100x = 23,100，x = 1 + 報酬率
+		double expected = (Math.sqrt(1 + 4 * 23100.0 / 10100) - 1) / 2 - 1;
+		check("dca irr with fee", true, Math.abs(DcaCalculator.irr(10100, 12, 24, 23100) - expected) < 1e-10);
+		check("dca irr no fee = rate", true, Math.abs(DcaCalculator.irr(1000, 1, 120, DcaCalculator.futureValue(1000, 1, 120, 0.07)) - 0.07) < 1e-10);
+
+		String yearly = dca("target=FUND&amountMin=10%2C000&amountMax=10000&interval=12&years=2&rateMin=10&rateMax=10&buyFee=0&minFee=0&sellFee=0");
+		check("dca yearly single scenario", true, yearly.contains("\"code\":\"MID\",\"name\":\"試算\"") && !yearly.contains("\"LOW\""));
+		check("dca yearly rows", true, yearly.contains("\"rows\":[[1,1,10000.00,11000.00,1000.00],[2,2,20000.00,23100.00,3100.00]]"));
+		check("dca yearly irr", true, yearly.contains("\"irr\":0.1000000000,"));
+		check("dca yearly matrix 1x1", true, yearly.contains("\"rateSpread\":null,\"amountSpread\":null"));
+
+		String etf = dca("target=ETF&amountMin=3000&amountMax=3000&interval=1&years=1&rateMin=0&rateMax=0");
+		check("dca etf default fees", true, etf.contains("\"buyFee\":0.0014250000,\"minFee\":1,\"sellFee\":0.0024250000,"));
+		check("dca etf value and profit", true, etf.contains("\"value\":36000.00,\"profit\":-51.30,"));
+		check("dca etf sell cost", true, etf.contains("\"sellCost\":87.30,\"net\":35912.70,"));
+		check("dca etf irr below zero", true, number(etf, "\"irr\":") < 0);
+
+		String range = dca("target=STOCK&amountMin=5000&amountMax=10000&interval=1&years=10&rateMin=4&rateMax=10&round=1");
+		check("dca range scenarios", true, range.contains("\"code\":\"LOW\",\"name\":\"保守\",\"amount\":5000,\"rate\":0.0400000000,")
+				&& range.contains("\"code\":\"MID\",\"name\":\"中間\",\"amount\":7500,\"rate\":0.0700000000,")
+				&& range.contains("\"code\":\"HIGH\",\"name\":\"樂觀\",\"amount\":10000,\"rate\":0.1000000000,"));
+		check("dca range whole", true, range.contains("\"decimals\":0,") && range.contains("\"count\":120,"));
+		check("dca range matrix", true, range.contains("\"amounts\":[5000,7500,10000],")
+				&& range.contains("\"rates\":[0.0400000000,0.0550000000,0.0700000000,0.0850000000,0.1000000000],"));
+		check("dca stock sell fee", true, range.contains("\"sellFee\":0.0044250000,"));
+
+		check("dca amount max < min", true, dca("amountMin=2&amountMax=1&interval=1&years=1&rateMin=1&rateMax=2").contains("\"field\":\"amountMax\""));
+		check("dca rate max < min", true, dca("amountMin=1&amountMax=1&interval=1&years=1&rateMin=3&rateMax=2").contains("\"field\":\"rateMax\""));
+		check("dca interval range", true, dca("amountMin=1&amountMax=1&interval=13&years=1&rateMin=1&rateMax=2").contains("\"field\":\"interval\""));
+		check("dca blank fee", true, dca("amountMin=1&amountMax=1&interval=1&years=1&rateMin=1&rateMax=2&buyFee=").contains("\"field\":\"buyFee\""));
+		check("dca bad target", true, dca("target=BOND&amountMin=1&amountMax=1&interval=1&years=1&rateMin=1&rateMax=2").contains("\"field\":\"target\""));
+		check("dca meta targets", true, call("/api/meta", "").contains("\"code\":\"ETF\",\"label\":\"ETF\",\"description\":")
+				&& call("/api/meta", "").contains("\"buyFee\":0.1425,\"minFee\":1,\"sellFee\":0.2425}"));
+	}
+
+	private static String dca(String query) {
+		return call("/api/dca", query);
 	}
 
 	/** 一種彩券各獎項的中獎組合數 ex. 1 170 5610 59840 / 575757 */
@@ -676,6 +727,10 @@ public final class CalculatorCheck {
 
 			HttpResponse<String> lottery = post(client, base + "/api/lottery", "game=DAILY_CASH&amount=50&frequency=MONTHLY&years=1&compareRate=7");
 			check("http lottery", true, lottery.statusCode() == 200 && lottery.body().contains("\"perBet\":27.9198,"));
+
+			HttpResponse<String> dca = post(client, base + "/api/dca", "target=FUND&amountMin=10000&amountMax=10000&interval=12&years=2&rateMin=10&rateMax=10"
+					+ "&buyFee=0&minFee=0&sellFee=0");
+			check("http dca", true, dca.statusCode() == 200 && dca.body().contains("23100.00"));
 
 			HttpResponse<String> currency = get(client, base + "/api/currency?amount=1000&from=USD&fromRate=32&to=TWD");
 			check("http currency", true, currency.body().contains("\"result\":32000.00"));

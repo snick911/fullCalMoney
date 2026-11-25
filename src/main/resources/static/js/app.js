@@ -1047,6 +1047,272 @@
     return calculator;
   }
 
+  /* ---------- 定期定額 ---------- */
+  const dcaTargets = new Map();
+  const feeRateFormat = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 4 });
+  const rangeWanFormat = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 1 });
+
+  /** 投入間隔 ex. 每月、每 2 個月、每季 */
+  const intervalText = (k) => ({ 1: '每月', 3: '每季', 6: '每半年', 12: '每年' }[k] || `每 ${k} 個月`);
+  /** 一年投入幾次：12 的因數時是整數，否則到小數一位 */
+  const timesPerYearText = (k) => (12 % k === 0 ? `一年 ${12 / k} 次` : `一年約 ${rangeWanFormat.format(12 / k)} 次`);
+  /** 費率 ex. 0.1425%、1% */
+  const feeRateText = (ratio) => `${feeRateFormat.format(ratio * 100)}%`;
+  /** 手續費常只有幾元，有小數時顯示到分 */
+  const feeMoney = (n) => fmt.twd(n, n % 1 ? 2 : 0);
+  /** 期末市值區間的精簡金額 ex. 77.7 萬、1.23 億 */
+  const rangeMoney = (n) => {
+    if (Math.abs(n) >= 1e8) return `${numberFormat(2).format(n / 1e8)} 億`;
+    if (Math.abs(n) >= 1e4) return `${rangeWanFormat.format(n / 1e4)} 萬`;
+    return numberFormat(0).format(Math.round(n));
+  };
+
+  function renderDca(d, scope) {
+    const twd = (n) => fmt.twd(n, d.decimals);
+    const single = d.scenarios.length === 1;
+    const mid = d.scenarios.find((s) => s.code === 'MID');
+    const low = d.scenarios[0];
+    const high = d.scenarios[d.scenarios.length - 1];
+    const m = d.matrix;
+
+    $$('[data-mid-label]', scope).forEach((el) => { el.hidden = single; });
+    $('[data-range-tile]', scope).hidden = single;
+    $('[data-scenario-card]', scope).hidden = single;
+    setOut(scope, 'cost', twd(mid.cost));
+    setOut(scope, 'value', twd(mid.value));
+    //兩端各自不斷行，空間不夠時只在「～」後面換行
+    $('[data-out="valueRange"]', scope).innerHTML = `<span class="tile__part">${rangeMoney(low.value)}～</span><span class="tile__part">${rangeMoney(high.value)}</span>`;
+    setOut(scope, 'profit', twd(mid.profit));
+    const profitTile = $('[data-profit-tile]', scope);
+    profitTile.classList.toggle('tile--loss', mid.profit < 0);
+    profitTile.classList.toggle('tile--gain', mid.profit > 0);
+    setOut(scope, 'irr', fmt.percentFixed(mid.irr));
+    setOut(scope, 'count', `${numberFormat(0).format(d.count)} 次`);
+    setOut(scope, 'totalReturn', fmt.percentFixed(mid.totalReturn));
+    setOut(scope, 'fees', twd(mid.fees));
+    setOut(scope, 'sellCost', twd(mid.sellCost));
+
+    //試算結果：投入方式、期末市值區間、報酬率與金額的影響、費用
+    const range = (a, b, format) => (a === b ? format(a) : `${format(a)}～${format(b)}`);
+    const pct = fmt.percent;
+    const points = [
+      `${intervalText(d.interval)}投入一次（${timesPerYearText(d.interval)}），${d.years} 年共 ${numberFormat(0).format(d.count)} 次；`
+        + `每期 ${range(d.amountMin, d.amountMax, twd)}${single ? '' : `，以中間的 ${twd(mid.amount)} 計算`}，總投入 ${twd(mid.cost)}`
+        + `${mid.fees > 0 ? `（本金 ${twd(mid.invested)}＋手續費 ${twd(mid.fees)}）` : ''}。`,
+      single
+        ? `年化報酬率 ${pct(mid.rate)} 時，期末市值約 ${twd(mid.value)}，獲利 ${twd(mid.profit)}（總報酬率 ${fmt.percentFixed(mid.totalReturn)}）。`
+        : `年化報酬率 ${range(d.rateMin, d.rateMax, pct)}：期末市值約 ${twd(low.value)}（保守）～${twd(high.value)}（樂觀）；`
+          + `中間情境（每期 ${twd(mid.amount)}、年化 ${pct(mid.rate)}）約 ${twd(mid.value)}，獲利 ${twd(mid.profit)}（總報酬率 ${fmt.percentFixed(mid.totalReturn)}）。`,
+    ];
+    if (mid.profit > 0) {
+      points.push(`期末市值中有 ${fmt.percent(mid.profit / mid.value)} 是投資獲利，其餘是投入的本金與手續費。`);
+    }
+    const effects = [];
+    if (m.rateSpread != null) {
+      effects.push(`同樣每期 ${twd(m.amounts[m.midAmount])}，年化 ${pct(d.rateMin)} 與 ${pct(d.rateMax)} 的期末市值相差 ${twd(m.rateSpread)}`);
+    }
+    if (m.amountSpread != null) {
+      effects.push(`同樣年化 ${pct(m.rates[m.midRate])}，每期 ${twd(d.amountMin)} 與 ${twd(d.amountMax)} 相差 ${twd(m.amountSpread)}`);
+    }
+    if (effects.length) points.push(`${effects.join('；')}。`);
+    if (mid.fees > 0 || mid.sellCost > 0) {
+      const gap = (mid.rate - mid.irr) * 100;
+      const buy = mid.fees > 0 ? `每次買入手續費約 ${feeMoney(mid.fee)}（${feeRateText(d.buyFee)}${d.minFee > 0 ? `，最低 ${feeMoney(d.minFee)}` : ''}），共 ${twd(mid.fees)}`
+        : '買入不收手續費';
+      const sell = mid.sellCost > 0 ? `期末賣出費用 ${feeRateText(d.sellFee)} 約 ${twd(mid.sellCost)}，賣出後拿回 ${twd(mid.net)}` : '期末賣出不收費用';
+      points.push(`${escapeHtml(d.targetName)}：${buy}；${sell}。扣除買賣費用後的實際年化報酬率為 ${fmt.percentFixed(mid.irr)}，`
+        + `${gap >= 0.005 ? `比預估的 ${pct(mid.rate)} 少 ${numberFormat(2).format(gap)} 個百分點` : `與預估的 ${pct(mid.rate)} 相差不到 0.01 個百分點`}。`);
+    } else {
+      points.push(`未計手續費與賣出費用，實際年化報酬率等於預估的 ${pct(mid.rate)}。`);
+    }
+    $('[data-dca-points]', scope).innerHTML = points.map((p) => `<li>${p}</li>`).join('');
+
+    $('tbody[data-scenario-rows]', scope).innerHTML = d.scenarios.map((s) =>
+      `<tr${s.code === 'MID' ? ' class="is-recommended"' : ''}><th scope="row">${escapeHtml(s.name)}</th><td>${twd(s.amount)}</td><td>${pct(s.rate)}</td>`
+      + `<td>${twd(s.cost)}</td><td class="is-accent">${twd(s.value)}</td><td${s.profit < 0 ? ' class="is-down"' : ''}>${twd(s.profit)}</td>`
+      + `<td>${fmt.percentFixed(s.totalReturn)}</td><td>${twd(s.net)}</td><td>${fmt.percentFixed(s.irr)}</td></tr>`).join('');
+
+    //期末市值對照表：列為年化報酬率、欄為每期金額，格內是期末市值與獲利
+    $('[data-matrix-card]', scope).hidden = m.amounts.length === 1 && m.rates.length === 1;
+    setOut(scope, 'matrixMeta', `${intervalText(d.interval)}投入、${d.years} 年；格內為期末市值與獲利`);
+    const sub = (text) => `<span class="asset-gain">${text}</span>`;
+    $('thead[data-matrix-head]', scope).innerHTML = '<tr><th scope="col">年化報酬率＼每期投資</th>'
+      + m.amounts.map((a, i) => `<th scope="col">${twd(a)}${sub(`總投入 ${twd(m.costs[i])}`)}</th>`).join('') + '</tr>';
+    $('tbody[data-matrix-rows]', scope).innerHTML = m.rates.map((rate, r) => `<tr><th scope="row">${pct(rate)}</th>`
+      + m.amounts.map((a, i) => `<td${r === m.midRate && i === m.midAmount ? ' class="is-accent"' : ''}>${twd(m.values[r][i])}`
+        + `${sub(`獲利 ${twd(m.profits[r][i])}`)}</td>`).join('') + '</tr>').join('');
+
+    renderDcaChart(d, scope);
+
+    const heads = single ? ['年度', '累積次數', '累積投入', '年底市值', '累積獲利']
+      : ['年度', '累積次數', '累積投入（中間）', '年底市值（中間）', '累積獲利（中間）', '保守：年底市值', '樂觀：年底市值'];
+    $('thead[data-year-head]', scope).innerHTML = `<tr>${heads.map((h) => `<th scope="col">${h}</th>`).join('')}</tr>`;
+    $('tbody[data-rows]', scope).innerHTML = mid.rows.map((r, i) =>
+      `<tr><td>${r[0]}</td><td>${numberFormat(0).format(r[1])}</td><td>${twd(r[2])}</td><td class="is-accent">${twd(r[3])}</td>`
+      + `<td${r[4] < 0 ? ' class="is-down"' : ''}>${twd(r[4])}</td>`
+      + `${single ? '' : `<td>${twd(low.rows[i][3])}</td><td>${twd(high.rows[i][3])}</td>`}</tr>`).join('');
+    setOut(scope, 'rowsMeta', single ? `${intervalText(d.interval)} ${twd(mid.amount)}、年化 ${pct(mid.rate)}`
+      : `保守：每期 ${twd(low.amount)}、${pct(low.rate)}；樂觀：每期 ${twd(high.amount)}、${pct(high.rate)}`);
+  }
+
+  /**
+   * 累積市值走勢：中間情境實線、保守～樂觀區間帶、累積投入淡色面積；
+   * 滑鼠或手指移動時縱線對齊最近的年度，列出各情境的市值
+   */
+  function dcaChart(box, d) {
+    const width = Math.max(box.clientWidth, 280);
+    const narrow = width < 480;
+    const height = narrow ? 240 : 290;
+    const single = d.scenarios.length === 1;
+    const m = { top: 14, right: single ? 16 : (narrow ? 44 : 52), bottom: 28, left: narrow ? 46 : 58 };
+    const plotW = width - m.left - m.right;
+    const plotH = height - m.top - m.bottom;
+    const years = d.years;
+    //第 0 年：剛投入第一筆
+    const series = d.scenarios.map((s) => ({ code: s.code, name: s.name, values: [s.amount, ...s.rows.map((r) => r[3])] }));
+    const mid = series.find((s) => s.code === 'MID');
+    const midScenario = d.scenarios.find((s) => s.code === 'MID');
+    const invested = [midScenario.amount + midScenario.fee, ...midScenario.rows.map((r) => r[2])];
+    const top = Math.max(...series.flatMap((s) => s.values), ...invested) * 1.04;
+    const yTicks = niceTicks(0, top, narrow ? 4 : 5);
+    const yMax = yTicks[yTicks.length - 1];
+    const x = (year) => m.left + (year / years) * plotW;
+    const y = (v) => m.top + plotH - (v / yMax) * plotH;
+    const coords = (values) => values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    const points = (values) => coords(values).join(' ');
+
+    const yearStep = [1, 2, 5, 10, 20, 25, 50].find((s) => years / s <= (narrow ? 5 : 8)) || 50;
+    const xTicks = Array.from({ length: Math.floor(years / yearStep) + 1 }, (_, i) => i * yearStep);
+    const grid = yTicks.map((v) => `<line class="chart__grid" x1="${m.left}" x2="${m.left + plotW}" y1="${y(v)}" y2="${y(v)}"></line>`
+      + `<text x="${m.left - 6}" y="${y(v) + 4}" text-anchor="end">${compactMoney(v)}</text>`).join('');
+    const axis = `<line class="chart__axis" x1="${m.left}" x2="${m.left + plotW}" y1="${y(0)}" y2="${y(0)}"></line>`
+      + xTicks.map((t) => `<text x="${x(t)}" y="${height - 8}" text-anchor="middle">${t} 年</text>`).join('');
+    const area = `<polygon class="chart__invested" points="${x(0)},${y(0)} ${points(invested)} ${x(years)},${y(0)}"></polygon>`;
+    const low = series[0];
+    const high = series[series.length - 1];
+    const band = single ? '' : `<polygon class="chart__band" points="${points(high.values)} ${coords(low.values).reverse().join(' ')}"></polygon>`
+      + `<polyline class="chart__edge" points="${points(low.values)}"></polyline><polyline class="chart__edge" points="${points(high.values)}"></polyline>`;
+    const line = `<polyline class="chart__line" points="${points(mid.values)}"></polyline>`;
+
+    //線尾標籤：保守、中間、樂觀
+    const endX = x(years);
+    const endLabels = single ? '' : spreadLabels(series.map((s) => ({ y: y(s.values[years]), text: s.name })), 15, m.top + plotH)
+      .map((e) => (Math.abs(e.labelY - e.y) > 1 ? `<line class="chart__leader" x1="${endX + 3}" y1="${e.y}" x2="${endX + 8}" y2="${e.labelY}"></line>` : '')
+        + `<text class="chart__label" x="${endX + 10}" y="${e.labelY + 4}">${escapeHtml(e.text)}</text>`).join('');
+
+    box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="累積市值走勢圖，數值見下方逐年明細">`
+      + `${grid}${area}${band}${axis}${line}${endLabels}`
+      + `<line class="chart__cross" data-cross x1="0" x2="0" y1="${m.top}" y2="${m.top + plotH}" visibility="hidden"></line>`
+      + `<circle class="chart__dot" data-hover r="4" visibility="hidden"></circle>`
+      + `<rect class="chart__hit" x="${m.left}" y="${m.top}" width="${plotW}" height="${plotH}"></rect></svg>`;
+
+    const svg = $('svg', box);
+    const cross = $('[data-cross]', svg);
+    const dot = $('[data-hover]', svg);
+    const tip = chartTip(box);
+    const twd = (n) => fmt.twd(n, d.decimals);
+    const moveTo = (event) => {
+      const rect = svg.getBoundingClientRect();
+      const px = (event.clientX - rect.left) * (width / rect.width);
+      const index = Math.max(0, Math.min(years, Math.round(((px - m.left) / plotW) * years)));
+      const cx = x(index);
+      cross.setAttribute('x1', cx);
+      cross.setAttribute('x2', cx);
+      cross.setAttribute('visibility', 'visible');
+      dot.setAttribute('cx', cx);
+      dot.setAttribute('cy', y(mid.values[index]));
+      dot.setAttribute('visibility', 'visible');
+      const rows = [...series].reverse().map((s) => ({
+        value: twd(s.values[index]),
+        label: single ? '市值' : `${s.name}市值`,
+        key: s.code === 'MID' ? 'legend-line' : 'legend-line legend-line--edge',
+      }));
+      rows.push({ value: twd(invested[index]), label: single ? '累積投入' : '累積投入（中間）', key: 'legend-area' });
+      tip.show(index === 0 ? '第一筆投入' : `第 ${index} 年底`, rows, cx * (rect.width / width), m.top);
+    };
+    const hide = () => {
+      cross.setAttribute('visibility', 'hidden');
+      dot.setAttribute('visibility', 'hidden');
+      tip.hide();
+    };
+    const hit = $('.chart__hit', svg);
+    hit.addEventListener('pointermove', moveTo);
+    hit.addEventListener('pointerdown', moveTo);
+    hit.addEventListener('pointerleave', hide);
+  }
+
+  /** 圖例與走勢圖；視窗大小改變時用最後一次的結果重畫 */
+  let lastDca = null;
+  function renderDcaChart(d, scope) {
+    lastDca = { d, scope };
+    const single = d.scenarios.length === 1;
+    $('[data-dca-legend]', scope).innerHTML = single
+      ? '<span><i class="legend-line"></i>市值</span><span><i class="legend-area"></i>累積投入</span>'
+      : '<span><i class="legend-line"></i>中間情境</span><span><i class="legend-band"></i>保守～樂觀</span><span><i class="legend-area"></i>累積投入（中間）</span>';
+    setOut(scope, 'chartMeta', single ? '' : '區間帶的下緣是保守情境、上緣是樂觀情境');
+    dcaChart($('[data-dca-chart]', scope), d);
+  }
+  let dcaResizeTimer = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(dcaResizeTimer);
+    dcaResizeTimer = setTimeout(() => {
+      if (lastDca && !lastDca.scope.hidden) renderDcaChart(lastDca.d, lastDca.scope);
+    }, DEBOUNCE_MS);
+  });
+
+  /** 定期定額：換標的類型時帶入預設費用；欄位下方顯示一年投入幾次、總次數與每次手續費 */
+  function initDca(meta) {
+    (meta.dcaTargets || []).forEach((t) => dcaTargets.set(t.code, t));
+    const section = $('#page-dca');
+    const target = $('#d-target');
+    const interval = $('#d-interval');
+    const years = $('#d-years');
+    const amountMin = $('#d-amount-min');
+    const amountMax = $('#d-amount-max');
+    const buyFee = $('#d-buy-fee');
+    const minFee = $('#d-min-fee');
+    const sellFee = $('#d-sell-fee');
+    const applyFees = () => {
+      const t = dcaTargets.get(target.value);
+      if (!t) return;
+      buyFee.value = String(t.buyFee);
+      minFee.value = String(t.minFee);
+      sellFee.value = String(t.sellFee);
+    };
+    const sync = () => {
+      const t = dcaTargets.get(target.value);
+      $('[data-target-hint]', section).textContent = t ? t.description : '';
+
+      const k = Number(interval.value);
+      const y = parseNumber(years.value);
+      const total = Number.isInteger(y) && y > 0 ? `，${y} 年共 ${numberFormat(0).format(Math.ceil((y * 12) / k))} 次` : '';
+      $('[data-interval-hint]', section).textContent = `${timesPerYearText(k)}${total}`;
+
+      //每次手續費以中間金額估算，與試算結果的中間情境相同
+      const low = parseNumber(amountMin.value);
+      const high = parseNumber(amountMax.value);
+      const rate = parseNumber(buyFee.value);
+      const least = parseNumber(minFee.value);
+      let feeHint = '';
+      if ([low, high, rate, least].every(Number.isFinite) && high >= low && rate >= 0 && least >= 0) {
+        const amount = (low + high) / 2;
+        feeHint = `每次約 ${feeMoney(Math.max((amount * rate) / 100, least))}（以每期 ${feeMoney(amount)} 計算）`;
+      }
+      $('[data-fee-hint]', section).textContent = feeHint;
+    };
+    const calculator = new Calculator('dca', {
+      render: renderDca,
+      onReset: () => { applyFees(); sync(); },
+      afterRestore: sync,
+    });
+    target.addEventListener('change', () => { applyFees(); sync(); });
+    interval.addEventListener('change', sync);
+    [years, amountMin, amountMax, buyFee, minFee].forEach((input) => input.addEventListener('input', sync));
+    applyFees();
+    sync();
+    return calculator;
+  }
+
   /* ---------- 房貸計算 ---------- */
   let rowSequence = 0;
 
@@ -1575,7 +1841,7 @@
     applyFont(root.dataset.font, false);
   }
 
-  /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency、#plan、#lottery；網址沒指定時回到上次的分頁 ---------- */
+  /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency、#dca、#plan、#lottery；網址沒指定時回到上次的分頁 ---------- */
   const pages = {};
 
   function showPage() {
@@ -1632,6 +1898,7 @@
 
     pages.bond = initBond();
     pages.currency = initCurrency(savedRates);
+    pages.dca = initDca(meta);
     pages.plan = initPlan(meta);
     pages.lottery = initLottery(meta);
     Object.values(pages).forEach((page) => page.restore());

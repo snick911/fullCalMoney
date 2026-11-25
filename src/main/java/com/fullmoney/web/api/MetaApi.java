@@ -9,6 +9,7 @@ import java.util.Map;
 import com.fullmoney.AppVersion;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
+import com.fullmoney.bean.DcaTarget;
 import com.fullmoney.bean.DepositRollover;
 import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.LotteryGame;
@@ -99,6 +100,15 @@ public final class MetaApi extends ApiEndpoint {
 		for (DepositRollover rollover : DepositRollover.values()) {
 			rollovers.add(option(rollover.name(), rollover.getLabel(), null, null));
 		}
+		//定期定額：標的類型與預設費用（百分比），換類型時網頁帶入
+		List<Map<String, Object>> dcaTargets = new ArrayList<>();
+		for (DcaTarget target : DcaTarget.values()) {
+			Map<String, Object> option = option(target.name(), target.getLabel(), "description", target.getDescription());
+			option.put("buyFee", target.getBuyFeeRate().movePointRight(2));
+			option.put("minFee", target.getMinFee());
+			option.put("sellFee", target.getSellFeeRate().movePointRight(2));
+			dcaTargets.add(option);
+		}
 
 		Map<String, Object> meta = new LinkedHashMap<>();
 		meta.put("name", AppVersion.NAME);
@@ -115,6 +125,7 @@ public final class MetaApi extends ApiEndpoint {
 		meta.put("lotteryGames", games);
 		meta.put("purchaseFrequencies", purchases);
 		meta.put("depositRollovers", rollovers);
+		meta.put("dcaTargets", dcaTargets);
 		return meta;
 	}
 

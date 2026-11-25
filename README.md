@@ -1,7 +1,7 @@
 # FullMoney 理財試算（網頁版）
 
 以 **Java 17** 開發的響應式（RWD）理財試算網站，手機、平板、電腦都能使用。
-計算邏輯沿用桌面版 FullMoney 1.4.0 的 `service` 與 `bean`（複利試算另外加入「原始本金」，其餘未修改公式），不含桌面版的大樂透分析；另外新增「樂透投資」頁籤，試算定期買彩券的回報率。
+計算邏輯沿用桌面版 FullMoney 1.4.0 的 `service` 與 `bean`（複利試算另外加入「原始本金」，其餘未修改公式），不含桌面版的大樂透分析；另外新增「定期定額」頁籤（基金、ETF、股票定期投入的期末市值區間）與「樂透投資」頁籤（定期買彩券的回報率）。
 
 **線上版（GitHub Pages）：<https://snick911.github.io/fullCalMoney/>**
 
@@ -21,6 +21,7 @@
 | 房貸計算 | 本息／本金平均攤還、寬限期、分段利率、提前還款（縮短年限或降低月付），列出每期攤還明細 |
 | 債券計算 | 持有到期的配息、總報酬率、到期殖利率（YTM）、年化報酬率；外幣債券換回台幣的報酬與匯兌損益 |
 | 貨幣投資 | 透過新台幣換算兩種幣別（可一鍵交換），可線上取得最新參考匯率；轉換結果依序存多筆定存（每筆 1～12 個月，利率與到期後本息續存或本金續存各自設定），到期本息以預估匯率換回指定貨幣，算出利息、匯兌損益、總報酬、年化報酬率、損益兩平匯率，並列出到期匯率上下變動時的報酬 |
+| 定期定額 | 適用於基金、ETF、股票：選擇標的類型（帶入常見的買入手續費、每筆最低手續費與期末賣出費用，可自行修改）、多久投入一次（每 1～12 個月）、投資年數，每期投資金額與預估年化報酬率都輸入最低～最高區間；算出保守（最低金額、最低報酬率）、中間、樂觀（最高金額、最高報酬率）三種情境的總投入、期末市值、獲利、總報酬率與扣除買賣費用後的實際年化報酬率，期末市值對照表（每期金額 × 5 級報酬率）、累積市值走勢圖（區間帶）與逐年明細 |
 | 投資計畫 | 輸入投資本金、每月固定投資金額、每月浮動投資金額（最低～最高）、年數＋月數、期望獲利金額，算出需要的年化報酬率與浮動投資上下限的影響，列出所有可以達成的方案（例如債券、股票都可以時兩個都列）、資產配置（定存／公債／公司債／股票每 5% 一級、股票再分 5 個等級共 2,030 種組合，近似篩選後以蒙地卡羅模擬 500 種市場走勢算出達成機率，四種資產分別模擬並彼此連動，保守型／穩健型／積極型各挑一個最佳配置）、模擬設定（目前年齡、固定比例／接近期滿逐年降低股票／年齡法則、再平衡方式、常態或厚尾分布、金融海嘯／升息循環／長期盤整壓力測試、中途提領）、策略比較與壓力測試表、調整建議、累積財富走勢圖與期滿金額區間圖（手寫 SVG，滑鼠／手指移動顯示數值），以及三種配置各自的逐年試算（資產配置圓餅、四種資產的金額與獲利，對照目標進度） |
 | 樂透投資 | 選擇今彩539、大樂透或威力彩，輸入每次買入金額、買入頻率（每期／每週／每月）與年數，依各獎項的中獎機率與獎金算出期望回報率（稅前與扣 20.4% 稅後）、總投入與平均虧損；換算只靠同一個獎項要中幾個才回本（例如頭獎 1 個、參獎 6 個）與中到這麼多個的機率；列出各獎項的機率、獎金、每注期望值與期間內預計中獎次數，模擬 2,000 人照同樣方式買的結果（中位數回報率、沒有虧損的比例），並對照同樣的錢改成定期投資的金額。大樂透、威力彩可輸入當期頭獎金額 |
 
@@ -82,12 +83,13 @@ $env:HOST = '0.0.0.0'; java -jar target\fullcalmoney.jar
 cmd /c test.bat
 ```
 
-`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 170 項，全部通過時結束代碼為 0：
+`test.bat` 會建置後執行 `CalculatorCheck`（不依賴測試框架），共 229 項，全部通過時結束代碼為 0：
 
 - 試算結果與桌面版文件記載的數值相同（見下方「計算參考值」）。
 - 投資計畫：風險最低方案的邊界（剛好 5% 是公債、5.02% 是公司債）、列出的方案與數量上限、資產配置的搜尋與模擬結果（各型最佳配置、股票等級與達成機率、2,030 種組合、定存上限、相同條件結果固定、三型各資產的逐年金額與獲利）、蒙地卡羅模擬（波動為 0 時與公式相同、常態亂數、中位數接近一般行情、厚尾分布的最差 1% 更差）、模擬設定（目標日期與年齡法則的股票比例、不再平衡時各資產各自複利、每年再平衡的逐年金額與獲利加總、策略比較、年齡法則排除積極型、壓力情境讓每型機率下降與情境年份、中途提領的排序合併與求解、提領超過投入與月份超出期間的錯誤）、期間不足的提醒、高風險與彩券的判定、短期目標不誤判成彩券；每月投資時求出的報酬率讓期滿金額剛好達標、浮動投資的上下限與中間值、沒有投入資金時的錯誤。
 - 浮動複利：區間上下限相同時與固定複利相同；相同種子結果相同、不同種子結果不同；每年的值都在區間內；固定種子的結果不可改變（否則使用者保存的種子會算出不同結果）。
 - 樂透投資：三種彩券各獎項的中獎組合數與排列組合公式相同；今彩539 每注期望值 27.92 元、回報率稅前 55.84%／稅後 47.76%，大樂透 56%／50.52%，威力彩 55%／47.56%；大樂透頭獎長期平均；可買注數無條件捨去；輸入頭獎金額、低於保底與金額不足一注的錯誤；模擬固定種子結果不變，買很多注時平均回報率接近期望值；中幾個才回本（今彩539 1／40／2,080／12,480 個）與至少 k 次的機率（精確二項、卜瓦松與常態近似）。
+- 定期定額：投入次數（每 5 個月、1 年為 3 次）、每月投入與等比級數公式相同、每年 1 萬元 10% 兩年為 $23,100（逐年明細）、最低手續費、手續費 1% 時的實際年化報酬率與二次方程式的解相同、沒有費用時等於預估報酬率；ETF／股票的預設費用與賣出費用；三種情境與 5 級報酬率的對照表；金額或報酬率上限小於下限、間隔超出 1～12、費用空白、標的類型錯誤的錯誤欄位。
 - 輸入檢查：拒絕科學記號、超出範圍、位數過多；接受千分位與全形數字。
 - 伺服器與瀏覽器端引擎共用的 `ApiEndpoint.execute`：正常結果、錯誤欄位、千分位格式。
 - 實際啟動伺服器呼叫 API：正常結果、錯誤欄位、未知路徑、路徑穿越與 `.class` 檔都回 404。
@@ -104,11 +106,13 @@ src/main/java/com/fullmoney/
 │                           新增：InvestmentTier（投資計畫的標的類別與報酬率假設）、AllocationProfile（資產配置類型）、InvestmentPlan（投資計畫結果）、
 │                           PlanSettings（模擬設定）、GlidePath／RebalanceMode／ReturnDistribution／StressScenario／StressTiming（模擬設定的選項）、
 │                           LotteryGame／LotteryPrize（三種彩券的價格、獎項與獎金規則）、LotteryPrizeValue、PurchaseFrequency（買入頻率）、
-│                           TimeDeposit／TimeDepositPeriod／TimeDepositResult／DepositReturn／DepositRollover（貨幣投資的定存）
+│                           TimeDeposit／TimeDepositPeriod／TimeDepositResult／DepositReturn／DepositRollover（貨幣投資的定存）、
+│                           DcaTarget（定期定額的標的類型與預設費用）、DcaResult／DcaYear（定期定額的結果與逐年明細）
 ├─ service/                 沿用桌面版：MoneyCalculator、MortgageCalculator、BondCalculator、CurrencyConverter
 │                           新增：FloatingMoneyCalculator（浮動複利）、RangeRandom（可重現的亂數，SplitMix64）、InvestmentPlanner（投資計畫）、
 │                           MarketSimulator（多資產蒙地卡羅模擬）、Allocation（配置的逐年比例與再平衡）、CashFlows（投入與中途提領）、
-│                           LotteryCalculator（彩券回報率與中獎模擬）、TimeDepositCalculator（依序定存與換回後的報酬）
+│                           LotteryCalculator（彩券回報率與中獎模擬）、TimeDepositCalculator（依序定存與換回後的報酬）、
+│                           DcaCalculator（定期定額的市值與實際年化報酬率）
 └─ web/
    ├─ ApiEndpoint.java      一個 API：參數 → 結果，不依賴 HttpServer，伺服器與瀏覽器端引擎共用
    ├─ ApiHandler.java       把 ApiEndpoint 接到 HttpServer：路徑、請求方式、錯誤紀錄
@@ -117,7 +121,7 @@ src/main/java/com/fullmoney/
    ├─ Json.java / Numbers.java   最小 JSON 輸出、千分位格式
    ├─ StaticHandler.java    從 classpath 提供網頁檔（副檔名白名單、ETag）
    ├─ Http.java             回應標頭（CSP 等安全標頭）、gzip
-   └─ api/                  ApiEndpoints（清單）、CompoundApi、FloatingCompoundApi、MortgageApi、BondApi、CurrencyApi、PlanApi、LotteryApi、MetaApi
+   └─ api/                  ApiEndpoints（清單）、CompoundApi、FloatingCompoundApi、MortgageApi、BondApi、CurrencyApi、DcaApi、PlanApi、LotteryApi、MetaApi
 src/main/resources/static/
 ├─ index.html               各分頁的版面
 ├─ css/app.css              主題色系、字體大小、RWD
@@ -166,10 +170,11 @@ mvn -P pages clean process-classes
 | `/api/mortgage` | `loanAmount`、`rate`、`years`、`graceYears`、`method`、`prepaymentMode`；分段利率以 `ratePeriod` + `rateValue` 成對重複送出，提前還款以 `prepayPeriod` + `prepayAmount` 成對重複送出 |
 | `/api/bond` | `currency`、`faceValue`、`buyPrice`、`redemptionPrice`、`couponRate`、`frequency`、`years`、`feeRate`、`taxRate`、`buyExchangeRate`、`couponExchangeRate`、`redemptionExchangeRate`（新台幣不必送匯率） |
 | `/api/currency` | `amount`、`from`、`fromRate`、`to`、`toRate`（新台幣不必送匯率）。定存（選填，最多 120 筆）：`depositTerm`（存期 1～12 個月）+ `depositRate`（年利率 %）+ `depositRollover`（到期後：`COMPOUND` 本息續存、`PRINCIPAL` 本金續存；最後一筆不影響結果）每筆一組重複送出，依順序接續；沒送 `depositRollover` 時每筆都用 `rollover`（預設本息續存）；`settle`（換回貨幣，預設同 `from`）、`settleRate`（到期預估匯率：1 單位 `to` 可換多少 `settle`，兩者相同時不必送）、`settleNowRate`（`settle` 目前 1 單位可換多少新台幣，只有 `settle` 不是 `from`、`to` 或新台幣時需要）。沒有定存時 `deposit` 為 `null` |
+| `/api/dca` | `target`（`FUND` 基金、`ETF`、`STOCK` 股票，預設 `ETF`）、`amountMin`／`amountMax`（每期投資金額區間）、`interval`（每隔幾個月投入一次，1～12）、`years`（1～80）、`rateMin`／`rateMax`（預估年化報酬率區間，-90～100）、`buyFee`（買入手續費 %）、`minFee`（每筆最低手續費，元）、`sellFee`（期末賣出費用 %）；三種費用沒送時用標的類型的預設值。回傳 `scenarios`（保守／中間／樂觀，兩個區間都只有一個值時只有中間）與 `matrix`（期末市值對照表） |
 | `/api/plan` | `principal`（投資本金，可為 0）、`monthlyFixed`（每月固定投資）、`floatMin`／`floatMax`（每月浮動投資區間；這三個選填，預設 0）、`years`（0～100）、`months`（0～11，合計至少 1 個月）、`profit`（期望獲利金額） |
 | `/api/lottery` | `game`（`DAILY_CASH` 今彩539、`LOTTO` 大樂透、`SUPER_LOTTO` 威力彩）、`amount`（每次買入金額，至少一注）、`frequency`（`EVERY_DRAW` 每期、`WEEKLY` 每週、`MONTHLY` 每月）、`years`（1～80）、`jackpot`（頭獎金額，選填，只用於大樂透與威力彩，不可低於保底）、`compareRate`（對照的定期投資年報酬率 0～30） |
 
-`/api/compound`、`/api/floating`、`/api/bond`、`/api/currency`、`/api/plan`、`/api/lottery` 可另外送 `round=1`，金額四捨五入到整數；不送時到小數兩位。回傳的 `decimals` 是金額的小數位數（0 或 2）。
+`/api/compound`、`/api/floating`、`/api/bond`、`/api/currency`、`/api/dca`、`/api/plan`、`/api/lottery` 可另外送 `round=1`，金額四捨五入到整數；不送時到小數兩位。回傳的 `decimals` 是金額的小數位數（0 或 2）。
 
 條件不合理時回傳 `400`，內容為 `{"error": "給使用者看的訊息", "field": "欄位名稱"}`；清單欄位為 `名稱:索引`，例如 `prepayPeriod:0`。
 
@@ -196,6 +201,8 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 | 債券匯率 32 → 配息 31、到期 30 | 台幣年化 4.07%、匯兌損益 -$24,500 |
 | 幣別轉換 1000 USD（匯率 32） | TWD 32,000.00 |
 | 貨幣投資 新台幣 100 萬以 32 換成 USD 31,250，依序定存 3 個月 4%、9 個月 3.6%（本息續存），到期以 31 換回 | 利息 USD 1,164.69（第 2 筆本金 31,562.50）；換回 $1,004,855.39，總報酬 $4,855.39（0.49%，年化相同）；匯兌損益 -$31,250；損益兩平匯率 30.8502。本金續存時利息 USD 1,156.25 |
+| 定期定額 每年 1 萬元、10%、2 年，無費用 | 第 1 年底 $11,000、期末 $23,100；手續費 1% 時實際年化 9.28% |
+| 定期定額預設（ETF、每月 5,000～10,000、10 年、4%～10%） | 中間情境總投入 $901,283、期末市值 $1,290,142、實際年化 6.93%；保守 $735,881～樂觀 $2,014,576 |
 | 投資計畫 100 萬、每月投資 1 萬＋浮動 0～5,000、5 年、獲利 40 萬 | 總投入 $1,750,000，需要年化 5.27%（投入上限 5.03%、只投入下限 5.54%） |
 | 投資計畫 本金 0、每月 1 萬、10 年、獲利 50 萬 | 總投入 $1,200,000，需要年化 6.77%，風險最低是公司債 |
 | 投資計畫 100 萬、5 年、獲利 25 萬（無每月投資） | 需要年化 4.56%；方案：公債（需行情較好）、公司債、定存型股票；建議資產配置：保守型 定存 0／公債 60／公司債 20／股票 20（穩健型股票，模擬達成機率 63%） |
@@ -294,6 +301,23 @@ Invoke-RestMethod "http://localhost:8080/api/mortgage?loanAmount=10000000&rate=2
 7. 網頁的「到期預估匯率」預設跟著目前匯率，自行輸入後就不再自動改變，按「帶入目前匯率」可恢復。
 8. **線上匯率**：按「取得最新匯率」時由瀏覽器直接讀取「國際匯率服務」[ExchangeRate-API](https://www.exchangerate-api.com)（`open.er-api.com`）或「開源匯率資料」[Currency API](https://github.com/fawazahmed0/exchange-api)（jsDelivr，連不上時改用 `currency-api.pages.dev`），兩者都免金鑰、允許跨網域讀取，所以 GitHub Pages 版也能用；選的來源連不上時自動改用另一個。讀到的是「1 新台幣可換多少外幣」，換成「1 外幣可換多少新台幣」並取 6 位有效數字，填入畫面上的匯率，之後換幣別或恢復預設時也用這組匯率（債券計算也是）。這是買賣中間價的參考匯率，與銀行牌告的買入、賣出匯率不同。
 9. 未計入：利息所得稅、換匯手續費、銀行買賣匯差、依實際天數（365 或 360 天）計息的差異。
+
+## 定期定額的計算規則
+
+標的類型與預設費用只定義在 `bean/DcaTarget.java`，計算在 `service/DcaCalculator.java`，參數與輸出在 `web/api/DcaApi.java`。
+
+| 標的類型 | 買入手續費 | 每筆最低 | 期末賣出費用 |
+| --- | --- | --- | --- |
+| 基金 | 1%（依通路與優惠不同） | 0 元 | 0%（贖回通常不收費） |
+| ETF | 0.1425% | 1 元 | 0.2425%（手續費 0.1425% + 證交稅 0.1%） |
+| 股票 | 0.1425% | 1 元 | 0.4425%（手續費 0.1425% + 證交稅 0.3%） |
+
+1. **投入時間**：第 1 個月月初投入第一筆，之後每隔 1～12 個月投入一次，最後一筆在期滿前；投入次數 = ⌈年數 × 12 ÷ 間隔⌉，例如每 5 個月、1 年為第 0、5、10 個月共 3 次。
+2. **市值**：每筆投入的市值 = 投入金額 ×（1 + 年化報酬率）^（持有月數 ÷ 12），期末市值為所有投入相加；逐年明細是每年年底的市值。年化報酬率是整段期間的平均假設（含配息再投入），基金經理費與 ETF 內扣費用已反映在淨值與股價中，不另外扣除。
+3. **費用**：買入手續費外加，每次 = max（投資金額 × 費率, 最低手續費），投資金額全部買進；總投入 = 本金 + 買入手續費，獲利 = 期末市值 − 總投入。期末賣出費用 = 期末市值 × 費率，賣出後拿回 = 期末市值 − 賣出費用。
+4. **實際年化報酬率**（內部報酬率）：讓每次付出的錢（含手續費）以這個報酬率成長到期末，剛好等於賣出後拿回的金額；終值隨報酬率遞增，以二分法求解。沒有任何費用時等於預估的年化報酬率。
+5. **三種情境**：保守 = 最低金額 × 最低報酬率，中間 = 兩個區間的中間值，樂觀 = 最高金額 × 最高報酬率；期末市值對照表列出每期金額（最低、中間、最高）× 年化報酬率（最低到最高平均分 5 級）。
+6. 未計入：每年報酬率的漲跌（下跌時同樣金額買到較多單位數）、股利所得稅、二代健保補充保費、匯率變動、手續費折扣的進位方式。
 
 ## 新增主題色系
 
