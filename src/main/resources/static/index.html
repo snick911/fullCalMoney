@@ -630,6 +630,11 @@
         <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>試算條件</h2>
         <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
+      <!-- 推薦範例：選項來自 /api/meta 的 dcaPresets，按一下帶入全部條件 -->
+      <div class="presets" role="group" aria-labelledby="d-presets-label">
+        <p class="presets__label" id="d-presets-label"><svg class="icon" aria-hidden="true"><use href="#i-bulb"/></svg>推薦範例<span class="presets__hint">按一下帶入條件，之後仍可修改</span></p>
+        <div class="presets__list" data-presets></div>
+      </div>
       <div class="fields">
         <div class="field">
           <label for="d-target">標的類型</label>
@@ -788,6 +793,11 @@
       <div class="card__head">
         <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>計畫條件</h2>
         <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
+      </div>
+      <!-- 推薦範例：選項來自 /api/meta 的 planPresets，按一下帶入全部條件與模擬設定並清空中途提領 -->
+      <div class="presets" role="group" aria-labelledby="p-presets-label">
+        <p class="presets__label" id="p-presets-label"><svg class="icon" aria-hidden="true"><use href="#i-bulb"/></svg>推薦範例<span class="presets__hint">按一下帶入條件並開始試算，之後仍可修改</span></p>
+        <div class="presets__list" data-presets></div>
       </div>
       <div class="fields">
         <div class="field">

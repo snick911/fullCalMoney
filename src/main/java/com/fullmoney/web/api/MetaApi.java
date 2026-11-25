@@ -9,10 +9,12 @@ import java.util.Map;
 import com.fullmoney.AppVersion;
 import com.fullmoney.bean.CouponFrequency;
 import com.fullmoney.bean.CurrencyType;
+import com.fullmoney.bean.DcaPreset;
 import com.fullmoney.bean.DcaTarget;
 import com.fullmoney.bean.DepositRollover;
 import com.fullmoney.bean.GlidePath;
 import com.fullmoney.bean.LotteryGame;
+import com.fullmoney.bean.PlanPreset;
 import com.fullmoney.bean.PrepaymentMode;
 import com.fullmoney.bean.PurchaseFrequency;
 import com.fullmoney.bean.RebalanceMode;
@@ -109,6 +111,40 @@ public final class MetaApi extends ApiEndpoint {
 			option.put("sellFee", target.getSellFeeRate().movePointRight(2));
 			dcaTargets.add(option);
 		}
+		//定期定額的推薦範例：按一下帶入所有條件，報酬率以 % 表示
+		List<Map<String, Object>> dcaPresets = new ArrayList<>();
+		for (DcaPreset preset : DcaPreset.values()) {
+			Map<String, Object> option = option(preset.name(), preset.getLabel(), "description", preset.getDescription());
+			option.put("target", preset.getTarget().name());
+			option.put("targetName", preset.getTarget().getLabel());
+			option.put("interval", preset.getInterval());
+			option.put("years", preset.getYears());
+			option.put("amountMin", preset.getAmountMin());
+			option.put("amountMax", preset.getAmountMax());
+			option.put("rateMin", preset.getRateMin());
+			option.put("rateMax", preset.getRateMax());
+			dcaPresets.add(option);
+		}
+		//投資計畫的推薦範例：欄位名稱與網頁表單相同，按一下帶入
+		List<Map<String, Object>> planPresets = new ArrayList<>();
+		for (PlanPreset preset : PlanPreset.values()) {
+			Map<String, Object> option = option(preset.name(), preset.getLabel(), "description", preset.getDescription());
+			option.put("target", preset.getTarget());
+			option.put("principal", preset.getPrincipal());
+			option.put("monthlyFixed", preset.getMonthlyFixed());
+			option.put("floatMin", preset.getFloatMin());
+			option.put("floatMax", preset.getFloatMax());
+			option.put("years", preset.getYears());
+			option.put("months", preset.getMonths());
+			option.put("profit", preset.getProfit());
+			option.put("age", preset.getAge());
+			option.put("glide", preset.getGlide().name());
+			option.put("rebalance", preset.getRebalance().name());
+			option.put("distribution", preset.getDistribution().name());
+			option.put("stress", preset.getStress().name());
+			option.put("stressTiming", preset.getStressTiming().name());
+			planPresets.add(option);
+		}
 
 		Map<String, Object> meta = new LinkedHashMap<>();
 		meta.put("name", AppVersion.NAME);
@@ -126,6 +162,8 @@ public final class MetaApi extends ApiEndpoint {
 		meta.put("purchaseFrequencies", purchases);
 		meta.put("depositRollovers", rollovers);
 		meta.put("dcaTargets", dcaTargets);
+		meta.put("dcaPresets", dcaPresets);
+		meta.put("planPresets", planPresets);
 		return meta;
 	}
 

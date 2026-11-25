@@ -7,7 +7,7 @@ public final class AppVersion {
 
 	public static final String NAME = "全算利計算器";
 
-	public static final String VERSION = "2.4.0";
+	public static final String VERSION = "2.5.0";
 
 	private AppVersion() {
 	}

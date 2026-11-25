@@ -569,6 +569,21 @@
     const withdrawList = initPeriodList(plan, 'withdraw', 'tpl-withdraw-row', () => '500,000', 36);
     glide.addEventListener('change', sync);
     stress.addEventListener('change', sync);
+
+    //推薦範例：帶入全部條件與模擬設定並清空中途提領；配置調整不是固定比例時列在條件摘要
+    const glideNames = new Map((meta.glidePaths || []).map((g) => [g.code, g.label]));
+    const wan = (n) => (n >= 1e4 ? `${rangeWanFormat.format(n / 1e4)} 萬` : `${numberFormat(0).format(n)} 元`);
+    const fields = ['principal', 'monthlyFixed', 'floatMin', 'floatMax', 'years', 'months', 'profit', 'age', 'glide', 'rebalance', 'distribution', 'stress', 'stressTiming'];
+    initPresets(plan, meta.planPresets, {
+      card: (p) => ({
+        tag: `目標 ${wan(p.target)}`,
+        terms: [`本金 ${wan(p.principal)}`, `每月 ${wan(p.monthlyFixed)}`, `${p.years} 年`, ...(p.glide === 'FIXED' ? [] : [glideNames.get(p.glide) || ''])],
+      }),
+      values: (p) => Object.fromEntries(fields.map((name) => [name, p[name]])),
+      extraMatch: () => $$('[name="withdrawMonth"]', plan.form).length === 0,
+      beforeApply: () => withdrawList.clear(),
+      afterApply: sync,
+    });
     sync();
     return plan;
   }
@@ -1260,7 +1275,7 @@
     }, DEBOUNCE_MS);
   });
 
-  /** 定期定額：換標的類型時帶入預設費用；欄位下方顯示一年投入幾次、總次數與每次手續費 */
+  /** 定期定額：換標的類型時帶入預設費用；欄位下方顯示一年投入幾次、總次數與每次手續費；推薦範例帶入全部條件 */
   function initDca(meta) {
     (meta.dcaTargets || []).forEach((t) => dcaTargets.set(t.code, t));
     const section = $('#page-dca');
@@ -1308,9 +1323,91 @@
     target.addEventListener('change', () => { applyFees(); sync(); });
     interval.addEventListener('change', sync);
     [years, amountMin, amountMax, buyFee, minFee].forEach((input) => input.addEventListener('input', sync));
+
+    //範例的費用用標的類型的預設值，與換標的類型時相同
+    const money0 = (n) => numberFormat(0).format(n);
+    initPresets(calculator, meta.dcaPresets, {
+      card: (p) => ({
+        tag: p.targetName,
+        terms: [`${intervalText(p.interval)} ${money0(p.amountMin)}～${money0(p.amountMax)} 元`, `${p.years} 年`, `年化 ${p.rateMin}%～${p.rateMax}%`],
+      }),
+      values: (p) => {
+        const t = dcaTargets.get(p.target) || {};
+        return {
+          target: p.target, interval: p.interval, years: p.years, amountMin: p.amountMin, amountMax: p.amountMax,
+          rateMin: p.rateMin, rateMax: p.rateMax, buyFee: t.buyFee, minFee: t.minFee, sellFee: t.sellFee,
+        };
+      },
+      afterApply: sync,
+    });
     applyFees();
     sync();
     return calculator;
+  }
+
+  /*
+   * ---------- 推薦範例（定期定額、投資計畫） ----------
+   * 保守、穩健、積極三個按鈕，選項來自 /api/meta；按一下帶入全部條件並立即試算。
+   * 條件與某個範例完全相同時，該按鈕標示「使用中」；改任何欄位、新增提領、恢復預設或還原保存的條件後都會重新比對。
+   */
+  /**
+   * @param card 範例 → { tag: 名稱旁的標籤, terms: [條件摘要，每段各自不斷行] }，說明文字用範例的 description
+   * @param values 範例 → { 欄位名稱: 值 }，選單比對字串、其他欄位比對數值；金額欄位填入時補千分位
+   * @param extraMatch 欄位以外也要符合的條件（ex. 沒有中途提領）
+   * @param beforeApply 填入欄位之前呼叫（ex. 清空提領清單）
+   * @param afterApply 填入欄位之後、試算之前呼叫（ex. 更新欄位提示）
+   */
+  function initPresets(calculator, presets, { card, values, extraMatch = () => true, beforeApply = () => {}, afterApply = () => {} }) {
+    const list = $('[data-presets]', calculator.form);
+    const items = presets || [];
+    list.closest('.presets').hidden = !items.length;
+    list.innerHTML = items.map((p) => {
+      const c = card(p);
+      return `<button type="button" class="preset profile--${escapeHtml(p.code)}" data-preset="${escapeHtml(p.code)}" aria-pressed="false">`
+        + `<span class="preset__head"><span class="preset__name">${escapeHtml(p.label)}</span>`
+        + `${c.tag ? `<span class="preset__tag">${escapeHtml(c.tag)}</span>` : ''}<span class="preset__current">使用中</span></span>`
+        + `<span class="preset__desc">${escapeHtml(p.description)}</span>`
+        + `<span class="preset__terms">${c.terms.map((t) => `<span>${escapeHtml(t)}</span>`).join('・')}</span></button>`;
+    }).join('');
+
+    const field = (name) => calculator.form.elements.namedItem(name);
+    const same = (el, value) => (el.tagName === 'SELECT' ? el.value === String(value) : parseNumber(el.value) === Number(value));
+    const mark = () => {
+      const extra = extraMatch();
+      $$('[data-preset]', list).forEach((button) => {
+        const p = items.find((x) => x.code === button.dataset.preset);
+        const match = extra && Object.entries(values(p)).every(([name, value]) => {
+          const el = field(name);
+          return !!el && same(el, value);
+        });
+        button.setAttribute('aria-pressed', String(match));
+      });
+    };
+
+    list.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-preset]');
+      const p = button && items.find((x) => x.code === button.dataset.preset);
+      if (!p) return;
+      beforeApply(p);
+      Object.entries(values(p)).forEach(([name, value]) => {
+        const el = field(name);
+        if (el) el.value = el.dataset.kind === 'money' ? numberFormat(0).format(value) : String(value);
+      });
+      afterApply(p);
+      refreshHints(calculator.form);
+      mark();
+      calculator.run();
+    });
+    //click：新增或刪除提領列；reset 事件發生時欄位還沒還原，等 Calculator 的處理之後再比對
+    ['input', 'change', 'click'].forEach((type) => calculator.form.addEventListener(type, mark));
+    calculator.form.addEventListener('reset', () => setTimeout(mark));
+    //還原保存的條件在各分頁初始化之後才進行，接在原本的 afterRestore 後面
+    const afterRestore = calculator.afterRestore;
+    calculator.afterRestore = () => {
+      afterRestore();
+      mark();
+    };
+    mark();
   }
 
   /* ---------- 房貸計算 ---------- */

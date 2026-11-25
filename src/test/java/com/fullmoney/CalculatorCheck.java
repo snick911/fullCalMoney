@@ -16,6 +16,7 @@ import com.fullmoney.bean.AllocationProfile;
 import com.fullmoney.bean.BondCondition;
 import com.fullmoney.bean.BondResult;
 import com.fullmoney.bean.CouponFrequency;
+import com.fullmoney.bean.DcaPreset;
 import com.fullmoney.bean.DepositReturn;
 import com.fullmoney.bean.DepositRollover;
 import com.fullmoney.bean.GlidePath;
@@ -24,6 +25,7 @@ import com.fullmoney.bean.InvestmentTier;
 import com.fullmoney.bean.LotteryGame;
 import com.fullmoney.bean.LotteryPrize;
 import com.fullmoney.bean.MortgagePrepayment;
+import com.fullmoney.bean.PlanPreset;
 import com.fullmoney.bean.PlanSettings;
 import com.fullmoney.bean.MortgageRateChange;
 import com.fullmoney.bean.MortgageResult;
@@ -80,6 +82,7 @@ public final class CalculatorCheck {
 		currency();
 		lottery();
 		dca();
+		planPresets();
 		params();
 		json();
 		endpoints();
@@ -391,10 +394,41 @@ public final class CalculatorCheck {
 		check("dca bad target", true, dca("target=BOND&amountMin=1&amountMax=1&interval=1&years=1&rateMin=1&rateMax=2").contains("\"field\":\"target\""));
 		check("dca meta targets", true, call("/api/meta", "").contains("\"code\":\"ETF\",\"label\":\"ETF\",\"description\":")
 				&& call("/api/meta", "").contains("\"buyFee\":0.1425,\"minFee\":1,\"sellFee\":0.2425}"));
+
+		//推薦範例：每一組都能直接試算（三種情境），中間報酬率依保守、穩健、積極遞增
+		BigDecimal previousMid = null;
+		for (DcaPreset preset : DcaPreset.values()) {
+			String json = dca("target=" + preset.getTarget().name() + "&interval=" + preset.getInterval() + "&years=" + preset.getYears()
+					+ "&amountMin=" + preset.getAmountMin().toPlainString() + "&amountMax=" + preset.getAmountMax().toPlainString()
+					+ "&rateMin=" + preset.getRateMin().toPlainString() + "&rateMax=" + preset.getRateMax().toPlainString());
+			check("dca preset " + preset.name(), true, json.contains("\"code\":\"HIGH\"") && !json.contains("\"error\""));
+			BigDecimal mid = preset.getRateMin().add(preset.getRateMax());
+			check("dca preset rising " + preset.name(), true, previousMid == null || mid.compareTo(previousMid) > 0);
+			previousMid = mid;
+		}
+		check("dca preset meta", true, call("/api/meta", "").contains("\"code\":\"BALANCED\",\"label\":\"穩健\",\"description\":\"追蹤大盤的市值型 ETF\","
+				+ "\"target\":\"ETF\",\"targetName\":\"ETF\",\"interval\":1,\"years\":15,\"amountMin\":5000,\"amountMax\":10000,\"rateMin\":4,\"rateMax\":8}"));
 	}
 
 	private static String dca(String query) {
 		return call("/api/dca", query);
+	}
+
+	/** 投資計畫的推薦範例：可行，且建議的配置類型就是同名的那一型（保守 → 保守型…） */
+	private static void planPresets() {
+		for (PlanPreset preset : PlanPreset.values()) {
+			String json = call("/api/plan", "principal=" + preset.getPrincipal().toPlainString() + "&monthlyFixed=" + preset.getMonthlyFixed().toPlainString()
+					+ "&floatMin=" + preset.getFloatMin().toPlainString() + "&floatMax=" + preset.getFloatMax().toPlainString() + "&years=" + preset.getYears()
+					+ "&months=" + preset.getMonths() + "&profit=" + preset.getProfit().toPlainString() + "&age=" + preset.getAge()
+					+ "&glide=" + preset.getGlide().name() + "&rebalance=" + preset.getRebalance().name() + "&distribution=" + preset.getDistribution().name()
+					+ "&stress=" + preset.getStress().name() + "&stressTiming=" + preset.getStressTiming().name());
+			check("plan preset feasible " + preset.name(), true, json.contains("\"feasible\":true"));
+			check("plan preset recommends " + preset.name(), true, json.contains("\"code\":\"" + preset.name() + "\",\"name\":\""
+					+ AllocationProfile.valueOf(preset.name()).getName() + "\",\"recommended\":true"));
+			check("plan preset target " + preset.name(), true, json.contains("\"target\":" + preset.getTarget().toPlainString() + ".00"));
+		}
+		check("plan preset meta", true, call("/api/meta", "").contains("\"code\":\"AGGRESSIVE\",\"label\":\"積極\",\"description\":\"20 年後的退休金\","
+				+ "\"target\":10000000,"));
 	}
 
 	/** 一種彩券各獎項的中獎組合數 ex. 1 170 5610 59840 / 575757 */
