@@ -5,9 +5,9 @@ package com.fullmoney;
  */
 public final class AppVersion {
 
-	public static final String NAME = "FullMoney 理財試算";
+	public static final String NAME = "全算利計算器";
 
-	public static final String VERSION = "2.3.0";
+	public static final String VERSION = "2.4.0";
 
 	private AppVersion() {
 	}

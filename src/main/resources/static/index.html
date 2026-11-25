@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>FullMoney 理財試算</title>
-<meta name="description" content="複利試算、房貸計算、債券報酬、貨幣投資（換匯與外幣定存）、基金 ETF 股票定期定額、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
+<title>全算利計算器</title>
+<meta name="description" content="全算利計算器：複利試算、房貸計算、債券報酬、貨幣投資（換匯與外幣定存）、基金 ETF 股票定期定額、投資計畫建議與樂透回報率試算，支援手機與電腦瀏覽。">
 <meta name="theme-color" content="#F2F3F5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- 部署到 GitHub Pages 時，"local" 會換成提交編號，檔案網址每版不同，瀏覽器就不會讀到舊檔 -->
@@ -14,38 +14,80 @@
 <script src="js/app.js?v=local" defer></script>
 </head>
 <body>
+<!-- 圖示：各處以 <svg class="icon"><use href="#i-…"/></svg> 引用，線條顏色跟著文字色 -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-compound" viewBox="0 0 24 24"><rect x="3.5" y="14" width="4" height="6.5" rx="1"/><rect x="10" y="10" width="4" height="10.5" rx="1"/><rect x="16.5" y="4" width="4" height="16.5" rx="1"/></symbol>
+  <symbol id="i-floating" viewBox="0 0 24 24"><path d="M3 12h3.5L9 6l4 12 3-8 1.5 2H21"/></symbol>
+  <symbol id="i-mortgage" viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/></symbol>
+  <symbol id="i-bond" viewBox="0 0 24 24"><path d="M14.5 3h-8A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-12z"/><path d="M14.5 3v4.5H19"/><path d="M8.5 12h7M8.5 16h4.5"/></symbol>
+  <symbol id="i-currency" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17.2h.01M12 17.2h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".9"/></symbol>
+  <symbol id="i-lottery" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h14a1.5 1.5 0 0 1 1.5 1.5V10a2 2 0 0 0 0 4v2.5A1.5 1.5 0 0 1 19 18H5a1.5 1.5 0 0 1-1.5-1.5V14a2 2 0 0 0 0-4z"/><path d="M14.5 6v2M14.5 11v2M14.5 16v2"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6.5h9M17 6.5h3M4 12h3M11 12h9M4 17.5h11M19 17.5h1"/><circle cx="15" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17.5" r="2"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"/><path d="M4 4v4.5h4.5"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v15.5a.5.5 0 0 0 .5.5H20"/><path d="M7.5 15l3.5-4 3 2.5 5-6"/></symbol>
+  <symbol id="i-bars" viewBox="0 0 24 24"><path d="M4 20.5h16"/><path d="M7.5 16.5V12M12 16.5V6.5M16.5 16.5v-7" stroke-width="3"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.8 10.6c.8.7 1.3 1.5 1.3 2.4h5c0-.9.5-1.7 1.3-2.4A6 6 0 0 0 12 3z"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M9 4.5H7A1.5 1.5 0 0 0 5.5 6v13.5A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V6A1.5 1.5 0 0 0 17 4.5h-2"/><rect x="9" y="3" width="6" height="3" rx="1"/><path d="M9 11h6M9 15h4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-exchange" viewBox="0 0 24 24"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/><path d="M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></symbol>
+  <symbol id="i-trend-up" viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+  <symbol id="i-trend-down" viewBox="0 0 24 24"><path d="m3 7 6 6 4-4 8 8"/><path d="M15 17h6v-6"/></symbol>
+  <symbol id="i-percent" viewBox="0 0 24 24"><path d="M18.5 5.5 5.5 18.5"/><circle cx="7.5" cy="7.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></symbol>
+  <symbol id="i-piggy" viewBox="0 0 24 24"><path d="M18.5 9.2c1 .6 1.7 1.6 1.9 2.8h1.1v3.5h-1.3a6 6 0 0 1-2 2.3V20h-3v-1.4a9.5 9.5 0 0 1-3.5 0V20h-3v-2.2A5.8 5.8 0 0 1 5 12.8C5 9.3 8.4 7 12.5 7c1.5 0 2.9.3 4 .8L18.5 6z"/><path d="M15.5 11.5h.01" stroke-width="2.4"/><path d="M10.5 9.6h2.5"/><path d="M5.2 11.5C3.9 11.4 3 10.6 3 9.5"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M17 6V4.8a1.3 1.3 0 0 0-1.3-1.3H6A2.5 2.5 0 0 0 3.5 6"/><rect x="3.5" y="6" width="17" height="14.5" rx="2"/><path d="M20.5 10.5H17a2.5 2.5 0 0 0 0 5h3.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5.5 21V4"/><path d="M5.5 4.5h12L15 8.5l2.5 4h-12"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M8 20h8M5 7h14"/><path d="M5 7l-2.5 6a2.5 2.5 0 0 0 5 0zM19 7l-2.5 6a2.5 2.5 0 0 0 5 0z"/></symbol>
+  <symbol id="i-sprout" viewBox="0 0 24 24"><path d="M12 21v-9"/><path d="M12 12c0-4.2 2.8-7 7.5-7 0 4.2-2.8 7-7.5 7z"/><path d="M12 14.5C12 11.2 9.8 9 5.5 9c0 3.3 2.2 5.5 6.5 5.5z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5v1.2A3 3 0 0 0 8 10.2M16 6h2.5v1.2a3 3 0 0 1-2.5 3"/><path d="M12 13.5V17M8.5 20.5h7M9.5 17h5v3.5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1.1 1-1.1 1.8v.4"/><path d="M12 17h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-device" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M11 18.5h2"/></symbol>
+  <!-- 外觀設定：三個重疊的圓（混色），本專案自行繪製 -->
+  <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="8.6" cy="9" r="5.2" fill="currentColor" fill-opacity=".16"/><circle cx="15.4" cy="9" r="5.2" fill="currentColor" fill-opacity=".16"/><circle cx="12" cy="14.9" r="5.2" fill="currentColor" fill-opacity=".16"/></symbol>
+</svg>
 <a class="skip-link" href="#main">跳到主要內容</a>
 
 <header class="site-header">
   <div class="topbar container">
-    <a class="brand" href="#compound" aria-label="FullMoney 理財試算 首頁">
+    <a class="brand" href="#compound" aria-label="全算利計算器 首頁">
       <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
         <rect width="32" height="32" rx="8" class="brand__tile"/>
         <path d="M7 22.5l6-6.5 4.5 4 7.5-9" class="brand__line"/>
         <path d="M19.5 11h5.5v5.5" class="brand__line"/>
       </svg>
-      <span class="brand__name">FullMoney</span>
-      <span class="brand__sub">理財試算</span>
+      <span class="brand__name">全算利計算器</span>
     </a>
-    <button type="button" class="settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="settingsPanel" aria-label="外觀設定：主題色系與字體大小">
-      <svg viewBox="0 0 24 24" aria-hidden="true" class="icon">
-        <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z"/>
-        <circle cx="7.5" cy="11.5" r="1.3"/><circle cx="10.5" cy="7.5" r="1.3"/><circle cx="15" cy="7.5" r="1.3"/>
-      </svg>
-      <span class="settings-toggle__text">外觀設定</span>
-    </button>
+    <div class="topbar__actions">
+      <button type="button" class="header-btn" id="helpToggle" aria-haspopup="dialog" aria-controls="helpDialog" aria-label="使用說明">
+        <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>
+        <span class="header-btn__text">說明</span>
+      </button>
+      <button type="button" class="header-btn settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="settingsPanel" aria-label="外觀設定：主題色系與字體大小">
+        <svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg>
+        <span class="header-btn__text">外觀設定</span>
+      </button>
+    </div>
   </div>
 
   <nav class="tabs" aria-label="試算項目">
     <div class="tabs__inner container">
-      <a class="tab" href="#compound" data-page="compound">複利試算</a>
-      <a class="tab" href="#floating" data-page="floating">複利試算（浮動）</a>
-      <a class="tab" href="#mortgage" data-page="mortgage">房貸計算</a>
-      <a class="tab" href="#bond" data-page="bond">債券計算</a>
-      <a class="tab" href="#currency" data-page="currency">貨幣投資</a>
-      <a class="tab" href="#dca" data-page="dca">定期定額</a>
-      <a class="tab" href="#plan" data-page="plan">投資計畫</a>
-      <a class="tab" href="#lottery" data-page="lottery">樂透投資</a>
+      <a class="tab" href="#compound" data-page="compound"><svg class="icon" aria-hidden="true"><use href="#i-compound"/></svg>複利試算</a>
+      <a class="tab" href="#floating" data-page="floating"><svg class="icon" aria-hidden="true"><use href="#i-floating"/></svg>複利試算（浮動）</a>
+      <a class="tab" href="#mortgage" data-page="mortgage"><svg class="icon" aria-hidden="true"><use href="#i-mortgage"/></svg>房貸計算</a>
+      <a class="tab" href="#bond" data-page="bond"><svg class="icon" aria-hidden="true"><use href="#i-bond"/></svg>債券計算</a>
+      <a class="tab" href="#currency" data-page="currency"><svg class="icon" aria-hidden="true"><use href="#i-currency"/></svg>貨幣投資</a>
+      <a class="tab" href="#dca" data-page="dca"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>定期定額</a>
+      <a class="tab" href="#plan" data-page="plan"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>投資計畫</a>
+      <a class="tab" href="#lottery" data-page="lottery"><svg class="icon" aria-hidden="true"><use href="#i-lottery"/></svg>樂透投資</a>
     </div>
   </nav>
 
@@ -83,14 +125,15 @@
   <!-- 複利試算 -->
   <section class="page" id="page-compound" data-page="compound" aria-labelledby="h-compound">
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-compound"/></svg></span>
       <h1 id="h-compound">複利試算</h1>
       <p class="page__desc">第 1 年年初投入原始本金；每年年初投入固定金額，投入金額每年再額外增加固定金額；年底依利率計息，試算逐年累積的財富。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/compound">
       <div class="card__head">
-        <h2>試算條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>試算條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -123,13 +166,13 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">投入金額</span><span class="tile__value" data-out="totalBaseAmount">—</span></div>
-        <div class="tile"><span class="tile__label">獲利金額</span><span class="tile__value" data-out="gains">—</span></div>
-        <div class="tile"><span class="tile__label">投資報酬率</span><span class="tile__value" data-out="gainRate">—</span></div>
-        <div class="tile tile--primary"><span class="tile__label">累積財富</span><span class="tile__value" data-out="totalSumAmount">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>投入金額</span></span><span class="tile__value" data-out="totalBaseAmount">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trend-up"/></svg><span>獲利金額</span></span><span class="tile__value" data-out="gains">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>投資報酬率</span></span><span class="tile__value" data-out="gainRate">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-piggy"/></svg><span>累積財富</span></span><span class="tile__value" data-out="totalSumAmount">—</span></div>
       </div>
       <div class="card card--flush">
-        <div class="card__head"><h2>逐年明細</h2></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>逐年明細</h2></div>
         <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
           <table class="data-table">
             <thead><tr><th scope="col">年度</th><th scope="col">本金加入</th><th scope="col">本年利息</th><th scope="col">純本金部位</th><th scope="col">累積財富</th></tr></thead>
@@ -143,14 +186,15 @@
   <!-- 複利試算（浮動） -->
   <section class="page" id="page-floating" data-page="floating" aria-labelledby="h-floating" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-floating"/></svg></span>
       <h1 id="h-floating">複利試算（浮動）</h1>
       <p class="page__desc">每年的年利率與額外增加投入在你設定的區間內隨機取值，模擬報酬有高有低的情況；按「重新計算」產生另一組結果。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/floating">
       <div class="card__head">
-        <h2>試算條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>試算條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -170,7 +214,7 @@
       </div>
       <div class="ranges">
         <fieldset class="range">
-          <legend>每年額外增加投入 <span class="range__hint">（第 2 年起每年取一次）</span></legend>
+          <legend><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg>每年額外增加投入 <span class="range__hint">（第 2 年起每年取一次）</span></legend>
           <div class="range__inputs">
             <div class="field">
               <label for="f-add-min">最低</label>
@@ -186,7 +230,7 @@
           </div>
         </fieldset>
         <fieldset class="range">
-          <legend>期望年利率 <span class="range__hint">（每年取一次，可輸入負數）</span></legend>
+          <legend><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg>期望年利率 <span class="range__hint">（每年取一次，可輸入負數）</span></legend>
           <div class="range__inputs">
             <div class="field">
               <label for="f-rate-min">最低</label>
@@ -212,15 +256,15 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">投入金額</span><span class="tile__value" data-out="totalBaseAmount">—</span></div>
-        <div class="tile"><span class="tile__label">獲利金額</span><span class="tile__value" data-out="gains">—</span></div>
-        <div class="tile"><span class="tile__label">投資報酬率</span><span class="tile__value" data-out="gainRate">—</span></div>
-        <div class="tile"><span class="tile__label">平均年利率</span><span class="tile__value" data-out="averageRate">—</span></div>
-        <div class="tile tile--primary"><span class="tile__label">累積財富</span><span class="tile__value" data-out="totalSumAmount">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>投入金額</span></span><span class="tile__value" data-out="totalBaseAmount">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trend-up"/></svg><span>獲利金額</span></span><span class="tile__value" data-out="gains">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>投資報酬率</span></span><span class="tile__value" data-out="gainRate">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>平均年利率</span></span><span class="tile__value" data-out="averageRate">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-piggy"/></svg><span>累積財富</span></span><span class="tile__value" data-out="totalSumAmount">—</span></div>
       </div>
       <p class="note">年利率取到 0.01%、額外增加投入取到元，在區間內（含上下限）平均隨機產生。改條件或按「重新計算」都會重新產生；重新開啟網頁時顯示上次的結果。試算僅供參考。</p>
       <div class="card card--flush">
-        <div class="card__head"><h2>逐年明細</h2></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>逐年明細</h2></div>
         <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
           <table class="data-table">
             <thead><tr><th scope="col">年度</th><th scope="col">年利率</th><th scope="col">額外增加</th><th scope="col">本金加入</th><th scope="col">本年利息</th><th scope="col">純本金部位</th><th scope="col">累積財富</th></tr></thead>
@@ -234,14 +278,15 @@
   <!-- 房貸計算 -->
   <section class="page" id="page-mortgage" data-page="mortgage" aria-labelledby="h-mortgage" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-mortgage"/></svg></span>
       <h1 id="h-mortgage">房貸計算</h1>
       <p class="page__desc">依貸款金額、利率、年限、寬限期與還款方式試算每期還款，可加入分段利率與提前還款。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/mortgage">
       <div class="card__head">
-        <h2>試算條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>試算條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -269,7 +314,7 @@
 
       <div class="advanced">
         <details class="sublist" data-list="rate">
-          <summary><span>分段利率</span><span class="badge" data-count hidden></span></summary>
+          <summary><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>分段利率</span><span class="badge" data-count hidden></span></summary>
           <div class="sublist__body">
             <p class="sublist__desc">從起始期數起改用新利率並重算月付，之前的期數用上方的年利率。第 13 期是第 2 年第 1 個月。</p>
             <div class="sublist__rows" data-rows></div>
@@ -279,7 +324,7 @@
           </div>
         </details>
         <details class="sublist" data-list="prepay">
-          <summary><span>提前還款</span><span class="badge" data-count hidden></span></summary>
+          <summary><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>提前還款</span><span class="badge" data-count hidden></span></summary>
           <div class="sublist__body">
             <p class="sublist__desc">在該期正常繳款後多還本金，下一期起利息減少。未計入提前還款違約金。</p>
             <div class="field field--inline">
@@ -298,21 +343,21 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">寬限期月付</span><span class="tile__value" data-out="gracePayment">—</span></div>
-        <div class="tile tile--primary"><span class="tile__label">攤還首期月付</span><span class="tile__value" data-out="firstPayment">—</span></div>
-        <div class="tile"><span class="tile__label">利息總額</span><span class="tile__value" data-out="totalInterest">—</span></div>
-        <div class="tile"><span class="tile__label">本息總額</span><span class="tile__value" data-out="totalPayment">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span>寬限期月付</span></span><span class="tile__value" data-out="gracePayment">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span>攤還首期月付</span></span><span class="tile__value" data-out="firstPayment">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>利息總額</span></span><span class="tile__value" data-out="totalInterest">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>本息總額</span></span><span class="tile__value" data-out="totalPayment">—</span></div>
       </div>
       <div class="tiles tiles--secondary" data-prepay-summary hidden>
-        <div class="tile"><span class="tile__label">還款期間</span><span class="tile__value" data-out="term">—</span></div>
-        <div class="tile"><span class="tile__label">提前還款總額</span><span class="tile__value" data-out="prepaid">—</span></div>
-        <div class="tile"><span class="tile__label">省下利息</span><span class="tile__value" data-out="savedInterest">—</span></div>
-        <div class="tile"><span class="tile__label">提早還清</span><span class="tile__value" data-out="earlier">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span>還款期間</span></span><span class="tile__value" data-out="term">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>提前還款總額</span></span><span class="tile__value" data-out="prepaid">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-piggy"/></svg><span>省下利息</span></span><span class="tile__value" data-out="savedInterest">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span>提早還清</span></span><span class="tile__value" data-out="earlier">—</span></div>
       </div>
       <p class="note" data-note data-default="每期金額四捨五入到元，尾差由最後一期吸收。試算僅供參考，實際金額以銀行核貸為準。">每期金額四捨五入到元，尾差由最後一期吸收。試算僅供參考，實際金額以銀行核貸為準。</p>
       <div class="card card--flush">
         <div class="card__head">
-          <h2>攤還明細</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>攤還明細</h2>
           <span class="card__meta" data-out="rowCount"></span>
         </div>
         <div class="table-wrap" tabindex="0" aria-label="攤還明細，可捲動">
@@ -328,14 +373,15 @@
   <!-- 債券計算 -->
   <section class="page" id="page-bond" data-page="bond" aria-labelledby="h-bond" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-bond"/></svg></span>
       <h1 id="h-bond">債券計算</h1>
       <p class="page__desc">試算持有到期的配息與報酬率，外幣債券可依匯率換算回新台幣。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/bond">
       <div class="card__head">
-        <h2>試算條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>試算條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -377,7 +423,7 @@
       </div>
 
       <fieldset class="fieldset" data-exchange>
-        <legend>匯率 <span class="fieldset__hint" data-rate-caption>（1 USD 可換多少新台幣）</span></legend>
+        <legend><svg class="icon" aria-hidden="true"><use href="#i-exchange"/></svg>匯率 <span class="fieldset__hint" data-rate-caption>（1 USD 可換多少新台幣）</span></legend>
         <div class="fields">
           <div class="field">
             <label for="b-rate-buy">買入匯率</label>
@@ -399,13 +445,13 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile tile--primary"><span class="tile__label">到期殖利率 (YTM)</span><span class="tile__value" data-out="ytm">—</span></div>
-        <div class="tile"><span class="tile__label">年化報酬率 <span data-out="codeLabel">USD</span></span><span class="tile__value" data-out="bondAnnual">—</span></div>
-        <div class="tile" data-foreign><span class="tile__label">年化報酬率 台幣</span><span class="tile__value" data-out="homeAnnual">—</span></div>
-        <div class="tile" data-foreign><span class="tile__label">匯兌損益</span><span class="tile__value" data-out="exchangeGain">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>到期殖利率 (YTM)</span></span><span class="tile__value" data-out="ytm">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>年化報酬率 <span data-out="codeLabel">USD</span></span></span><span class="tile__value" data-out="bondAnnual">—</span></div>
+        <div class="tile" data-foreign><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>年化報酬率 台幣</span></span><span class="tile__value" data-out="homeAnnual">—</span></div>
+        <div class="tile" data-foreign><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-exchange"/></svg><span>匯兌損益</span></span><span class="tile__value" data-out="exchangeGain">—</span></div>
       </div>
       <div class="card card--flush">
-        <div class="card__head"><h2>報酬摘要</h2></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg>報酬摘要</h2></div>
         <div class="table-wrap table-wrap--auto">
           <table class="data-table data-table--summary">
             <thead><tr><th scope="col">項目</th><th scope="col" data-out="codeHead">USD</th><th scope="col" data-foreign>換回台幣</th></tr></thead>
@@ -416,7 +462,7 @@
       <p class="note">匯率預設值僅為範例，請輸入實際匯率。假設在配息日買進，未計應計利息、買賣價差、提前贖回與換匯手續費，試算僅供參考。</p>
       <div class="card card--flush">
         <div class="card__head">
-          <h2>現金流明細</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>現金流明細</h2>
           <span class="card__meta" data-out="rowCount"></span>
         </div>
         <div class="table-wrap" tabindex="0" aria-label="現金流明細，可捲動">
@@ -432,14 +478,15 @@
   <!-- 貨幣投資：換匯後依序定存，到期本息以預估匯率換回指定貨幣 -->
   <section class="page" id="page-currency" data-page="currency" aria-labelledby="h-currency" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-currency"/></svg></span>
       <h1 id="h-currency">貨幣投資</h1>
       <p class="page__desc">把錢換成另一種貨幣後依序定存，最後把本金與利息以預估匯率換回指定貨幣，算出利息、匯兌損益與總報酬。匯率可以自行輸入，也可以線上取得最新參考匯率。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/currency">
       <div class="card__head">
-        <h2>換匯</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-exchange"/></svg>換匯</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -486,7 +533,7 @@
       </div>
 
       <fieldset class="fieldset">
-        <legend>定存 <span class="fieldset__hint" data-deposit-caption>（本金為上方的轉換結果）</span></legend>
+        <legend><svg class="icon" aria-hidden="true"><use href="#i-piggy"/></svg>定存 <span class="fieldset__hint" data-deposit-caption>（本金為上方的轉換結果）</span></legend>
         <p class="sublist__desc">一筆到期後接著存下一筆，存期 1 個月到 1 年；每筆可設定不同的年利率，以及到期後本息續存或只續存本金。最後一筆到期後換回下方的換回貨幣。</p>
         <button type="button" class="btn btn--outline" data-add-deposit>
           <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新增定存
@@ -516,36 +563,36 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">原幣金額</span><span class="tile__value" data-out="amount">—</span></div>
-        <div class="tile"><span class="tile__label">轉換結果</span><span class="tile__value" data-out="result">—</span></div>
-        <div class="tile"><span class="tile__label">換算匯率</span><span class="tile__value" data-out="crossRate">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>原幣金額</span></span><span class="tile__value" data-out="amount">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-exchange"/></svg><span>轉換結果</span></span><span class="tile__value" data-out="result">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-scale"/></svg><span>換算匯率</span></span><span class="tile__value" data-out="crossRate">—</span></div>
       </div>
 
       <p class="note" data-deposit-empty hidden>新增定存後，這裡會顯示利息與換回後的總報酬。</p>
       <div class="results__group" data-deposit-results hidden>
         <div class="tiles">
-          <div class="tile"><span class="tile__label">投入成本</span><span class="tile__value" data-out="cost">—</span></div>
-          <div class="tile"><span class="tile__label">利息合計</span><span class="tile__value" data-out="interest">—</span></div>
-          <div class="tile tile--primary"><span class="tile__label">預估換回</span><span class="tile__value" data-out="value">—</span></div>
-          <div class="tile" data-profit-tile><span class="tile__label">總報酬</span><span class="tile__value" data-out="profit">—</span></div>
-          <div class="tile"><span class="tile__label">年化報酬率</span><span class="tile__value" data-out="annualReturn">—</span></div>
+          <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>投入成本</span></span><span class="tile__value" data-out="cost">—</span></div>
+          <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-sprout"/></svg><span>利息合計</span></span><span class="tile__value" data-out="interest">—</span></div>
+          <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-piggy"/></svg><span>預估換回</span></span><span class="tile__value" data-out="value">—</span></div>
+          <div class="tile" data-profit-tile><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trend-up"/></svg><span>總報酬</span></span><span class="tile__value" data-out="profit">—</span></div>
+          <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>年化報酬率</span></span><span class="tile__value" data-out="annualReturn">—</span></div>
         </div>
         <div class="tiles tiles--secondary">
-          <div class="tile"><span class="tile__label">總報酬率</span><span class="tile__value" data-out="totalReturn">—</span></div>
-          <div class="tile"><span class="tile__label">利息收益（換回後）</span><span class="tile__value" data-out="interestValue">—</span></div>
-          <div class="tile" data-fx><span class="tile__label">匯兌損益</span><span class="tile__value" data-out="exchangeGain">—</span></div>
-          <div class="tile" data-fx><span class="tile__label">損益兩平匯率</span><span class="tile__value" data-out="breakEvenRate">—</span></div>
+          <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>總報酬率</span></span><span class="tile__value" data-out="totalReturn">—</span></div>
+          <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-sprout"/></svg><span>利息收益（換回後）</span></span><span class="tile__value" data-out="interestValue">—</span></div>
+          <div class="tile" data-fx><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-exchange"/></svg><span>匯兌損益</span></span><span class="tile__value" data-out="exchangeGain">—</span></div>
+          <div class="tile" data-fx><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-scale"/></svg><span>損益兩平匯率</span></span><span class="tile__value" data-out="breakEvenRate">—</span></div>
         </div>
 
         <article class="advice" aria-labelledby="currency-advice-title">
           <div class="advice__head">
-            <h2 class="advice__title" id="currency-advice-title">試算結果</h2>
+            <h2 class="advice__title" id="currency-advice-title"><svg class="icon" aria-hidden="true"><use href="#i-bulb"/></svg>試算結果</h2>
           </div>
           <ul class="advice__list" data-deposit-points></ul>
         </article>
 
         <div class="card card--flush">
-          <div class="card__head"><h2>定存明細</h2><span class="card__meta" data-out="depositMeta"></span></div>
+          <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>定存明細</h2><span class="card__meta" data-out="depositMeta"></span></div>
           <div class="table-wrap" tabindex="0" aria-label="定存明細，可捲動">
             <table class="data-table">
               <thead><tr><th scope="col">筆數</th><th scope="col">期間</th><th scope="col">存期</th><th scope="col">年利率</th><th scope="col">本金</th><th scope="col">利息</th><th scope="col">到期本息</th><th scope="col">累計利息</th><th scope="col">到期後</th></tr></thead>
@@ -555,7 +602,7 @@
         </div>
 
         <div class="card card--flush" data-fx>
-          <div class="card__head"><h2>到期匯率變動試算</h2><span class="card__meta" data-out="scenarioMeta"></span></div>
+          <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-bars"/></svg>到期匯率變動試算</h2><span class="card__meta" data-out="scenarioMeta"></span></div>
           <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="到期匯率變動試算，可捲動">
             <table class="data-table data-table--summary data-table--scenario">
               <thead><tr><th scope="col">到期匯率</th><th scope="col">相對目前</th><th scope="col">換回金額</th><th scope="col">總報酬</th><th scope="col">總報酬率</th><th scope="col">年化報酬率</th></tr></thead>
@@ -573,14 +620,15 @@
   <!-- 定期定額：基金、ETF、股票每隔固定月數投入，每期金額與年化報酬率都可輸入區間 -->
   <section class="page" id="page-dca" data-page="dca" aria-labelledby="h-dca" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-calendar"/></svg></span>
       <h1 id="h-dca">定期定額</h1>
       <p class="page__desc">適用於基金、ETF 與股票：每隔固定月數投入一筆錢，輸入每期投資金額與預估年化報酬率的區間，算出保守、中間、樂觀三種情境的期末市值、獲利，以及扣除買賣費用後的實際年化報酬率。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/dca">
       <div class="card__head">
-        <h2>試算條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>試算條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -613,7 +661,7 @@
       </div>
       <div class="ranges">
         <fieldset class="range">
-          <legend>每期投資金額 <span class="range__hint">（以最低、中間、最高試算）</span></legend>
+          <legend><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg>每期投資金額 <span class="range__hint">（以最低、中間、最高試算）</span></legend>
           <div class="range__inputs">
             <div class="field">
               <label for="d-amount-min">最低</label>
@@ -629,7 +677,7 @@
           </div>
         </fieldset>
         <fieldset class="range">
-          <legend>預估年化報酬率 <span class="range__hint">（含配息再投入，可輸入負數）</span></legend>
+          <legend><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg>預估年化報酬率 <span class="range__hint">（含配息再投入，可輸入負數）</span></legend>
           <div class="range__inputs">
             <div class="field">
               <label for="d-rate-min">最低</label>
@@ -644,7 +692,7 @@
         </fieldset>
       </div>
       <fieldset class="fieldset">
-        <legend>費用 <span class="fieldset__hint">（換標的類型時帶入常見費率，可自行修改）</span></legend>
+        <legend><svg class="icon" aria-hidden="true"><use href="#i-receipt"/></svg>費用 <span class="fieldset__hint">（換標的類型時帶入常見費率，可自行修改）</span></legend>
         <div class="fields">
           <div class="field">
             <label for="d-buy-fee">買入手續費</label>
@@ -668,28 +716,28 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">總投入<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="cost">—</span></div>
-        <div class="tile tile--primary"><span class="tile__label">期末市值<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="value">—</span></div>
-        <div class="tile" data-range-tile><span class="tile__label">期末市值（保守～樂觀）</span><span class="tile__value" data-out="valueRange">—</span></div>
-        <div class="tile" data-profit-tile><span class="tile__label">獲利<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="profit">—</span></div>
-        <div class="tile"><span class="tile__label">實際年化報酬率</span><span class="tile__value" data-out="irr">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>總投入<span data-mid-label>（中間）</span></span></span><span class="tile__value" data-out="cost">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-piggy"/></svg><span>期末市值<span data-mid-label>（中間）</span></span></span><span class="tile__value" data-out="value">—</span></div>
+        <div class="tile" data-range-tile><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-bars"/></svg><span>期末市值（保守～樂觀）</span></span><span class="tile__value" data-out="valueRange">—</span></div>
+        <div class="tile" data-profit-tile><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trend-up"/></svg><span>獲利<span data-mid-label>（中間）</span></span></span><span class="tile__value" data-out="profit">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>實際年化報酬率</span></span><span class="tile__value" data-out="irr">—</span></div>
       </div>
       <div class="tiles tiles--secondary">
-        <div class="tile"><span class="tile__label">投入次數</span><span class="tile__value" data-out="count">—</span></div>
-        <div class="tile"><span class="tile__label">總報酬率<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="totalReturn">—</span></div>
-        <div class="tile"><span class="tile__label">買入手續費合計<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="fees">—</span></div>
-        <div class="tile"><span class="tile__label">期末賣出費用<span data-mid-label>（中間）</span></span><span class="tile__value" data-out="sellCost">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span>投入次數</span></span><span class="tile__value" data-out="count">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>總報酬率<span data-mid-label>（中間）</span></span></span><span class="tile__value" data-out="totalReturn">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>買入手續費合計<span data-mid-label>（中間）</span></span></span><span class="tile__value" data-out="fees">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>期末賣出費用<span data-mid-label>（中間）</span></span></span><span class="tile__value" data-out="sellCost">—</span></div>
       </div>
 
       <article class="advice" aria-labelledby="dca-advice-title">
         <div class="advice__head">
-          <h2 class="advice__title" id="dca-advice-title">試算結果</h2>
+          <h2 class="advice__title" id="dca-advice-title"><svg class="icon" aria-hidden="true"><use href="#i-bulb"/></svg>試算結果</h2>
         </div>
         <ul class="advice__list" data-dca-points></ul>
       </article>
 
       <div class="card card--flush" data-scenario-card>
-        <div class="card__head"><h2>情境比較</h2><span class="card__meta">保守：最低金額與最低報酬率；樂觀：最高金額與最高報酬率</span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-bars"/></svg>情境比較</h2><span class="card__meta">保守：最低金額與最低報酬率；樂觀：最高金額與最高報酬率</span></div>
         <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="情境比較，可捲動">
           <table class="data-table data-table--summary">
             <thead><tr><th scope="col">情境</th><th scope="col">每期投資</th><th scope="col">年化報酬率</th><th scope="col">總投入</th><th scope="col">期末市值</th><th scope="col">獲利</th><th scope="col">總報酬率</th><th scope="col">賣出後拿回</th><th scope="col">實際年化報酬率</th></tr></thead>
@@ -699,7 +747,7 @@
       </div>
 
       <div class="card card--flush" data-matrix-card>
-        <div class="card__head"><h2>期末市值對照表</h2><span class="card__meta" data-out="matrixMeta"></span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>期末市值對照表</h2><span class="card__meta" data-out="matrixMeta"></span></div>
         <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="期末市值對照表，可捲動">
           <table class="data-table data-table--summary">
             <thead data-matrix-head></thead>
@@ -709,13 +757,13 @@
       </div>
 
       <div class="card chart-card dca-chart">
-        <div class="card__head"><h2>累積市值走勢</h2><span class="card__meta" data-out="chartMeta"></span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg>累積市值走勢</h2><span class="card__meta" data-out="chartMeta"></span></div>
         <div class="chart-legend" data-dca-legend></div>
         <div class="chart" data-dca-chart></div>
       </div>
 
       <div class="card card--flush">
-        <div class="card__head"><h2>逐年明細</h2><span class="card__meta" data-out="rowsMeta"></span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>逐年明細</h2><span class="card__meta" data-out="rowsMeta"></span></div>
         <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
           <table class="data-table">
             <thead data-year-head></thead>
@@ -731,14 +779,15 @@
   <!-- 投資計畫 -->
   <section class="page" id="page-plan" data-page="plan" aria-labelledby="h-plan" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-target"/></svg></span>
       <h1 id="h-plan">投資計畫</h1>
       <p class="page__desc">輸入本金、每月投資金額、投資期間與期望獲利，算出每年需要的報酬率，列出可以達成的投資方案與配置建議。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/plan">
       <div class="card__head">
-        <h2>計畫條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>計畫條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -767,7 +816,7 @@
       </div>
       <div class="ranges ranges--narrow">
         <fieldset class="range">
-          <legend>每月浮動投資金額 <span class="range__hint">（每月不固定的部分，以中間值估算）</span></legend>
+          <legend><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg>每月浮動投資金額 <span class="range__hint">（每月不固定的部分，以中間值估算）</span></legend>
           <div class="range__inputs">
             <div class="field">
               <label for="p-float-min">最低</label>
@@ -785,7 +834,7 @@
       </div>
       <div class="advanced">
         <details class="sublist" data-plan-settings open>
-          <summary><span>模擬設定</span></summary>
+          <summary><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg><span>模擬設定</span></summary>
           <div class="sublist__body">
             <p class="sublist__desc">定存、公債、公司債、股票分別模擬 500 種市場走勢，彼此連動（股市大跌時公司債通常也跌）。可設定再平衡、逐年降低股票比例、報酬分布，並用歷史情境做壓力測試。</p>
             <div class="fields fields--settings">
@@ -819,7 +868,7 @@
           </div>
         </details>
         <details class="sublist" data-list="withdraw">
-          <summary><span>中途提領</span><span class="badge" data-count hidden></span></summary>
+          <summary><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg><span>中途提領</span><span class="badge" data-count hidden></span></summary>
           <div class="sublist__body">
             <p class="sublist__desc">在第幾個月底從投資中提領（例如第 36 個月底拿 50 萬買車），依當時各資產的比例賣出，之後少了這筆錢的複利。累計提領不可超過已投入的金額。</p>
             <div class="sublist__rows" data-rows></div>
@@ -844,17 +893,17 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">目標金額</span><span class="tile__value" data-out="target">—</span></div>
-        <div class="tile"><span class="tile__label">總投入金額</span><span class="tile__value" data-out="invested">—</span></div>
-        <div class="tile" data-withdrawn-tile hidden><span class="tile__label">中途提領</span><span class="tile__value" data-out="withdrawn">—</span></div>
-        <div class="tile"><span class="tile__label">總報酬率</span><span class="tile__value" data-out="totalReturn">—</span></div>
-        <div class="tile tile--primary"><span class="tile__label">需要的年化報酬率</span><span class="tile__value" data-out="requiredRate">—</span></div>
-        <div class="tile"><span class="tile__label">風險最低的方案</span><span class="tile__value" data-out="tierName">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg><span>目標金額</span></span><span class="tile__value" data-out="target">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>總投入金額</span></span><span class="tile__value" data-out="invested">—</span></div>
+        <div class="tile" data-withdrawn-tile hidden><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg><span>中途提領</span></span><span class="tile__value" data-out="withdrawn">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>總報酬率</span></span><span class="tile__value" data-out="totalReturn">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>需要的年化報酬率</span></span><span class="tile__value" data-out="requiredRate">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>風險最低的方案</span></span><span class="tile__value" data-out="tierName">—</span></div>
       </div>
 
       <article class="advice" data-advice aria-labelledby="plan-advice-title">
         <div class="advice__head">
-          <h2 class="advice__title" id="plan-advice-title">投資建議</h2>
+          <h2 class="advice__title" id="plan-advice-title"><svg class="icon" aria-hidden="true"><use href="#i-bulb"/></svg>投資建議</h2>
           <span class="advice__verdict" data-out="verdict"></span>
         </div>
         <p class="advice__summary" data-out="summary"></p>
@@ -887,7 +936,7 @@
       </article>
 
       <div class="card scenario-card">
-        <div class="card__head"><h2>策略比較與壓力測試</h2><span class="card__meta">同樣的最佳配置，換一種調整方式或遇上壞行情</span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>策略比較與壓力測試</h2><span class="card__meta">同樣的最佳配置，換一種調整方式或遇上壞行情</span></div>
         <p class="scenario__settings" data-out="settingsText"></p>
         <h3 class="advice__sub">調整方式比較</h3>
         <p class="scenario__summary" data-out="strategySummary"></p>
@@ -912,12 +961,12 @@
       </div>
 
       <div class="card chart-card">
-        <div class="card__head"><h2>累積財富走勢</h2><span class="card__meta">三種配置的最佳配置，以一般行情計算</span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg>累積財富走勢</h2><span class="card__meta">三種配置的最佳配置，以一般行情計算</span></div>
         <div class="chart-legend" data-growth-legend></div>
         <div class="chart" data-growth-chart></div>
       </div>
       <div class="card chart-card">
-        <div class="card__head"><h2>期滿金額區間</h2><span class="card__meta">500 種市場走勢模擬</span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-bars"/></svg>期滿金額區間</h2><span class="card__meta">500 種市場走勢模擬</span></div>
         <div class="chart-legend">
           <span><i class="legend-range"></i>悲觀（最差 10%）～樂觀（最好 10%）</span>
           <span><i class="legend-median"></i>中位數</span>
@@ -935,14 +984,15 @@
   <!-- 樂透投資 -->
   <section class="page" id="page-lottery" data-page="lottery" aria-labelledby="h-lottery" hidden>
     <div class="page__head">
+      <span class="page__icon" aria-hidden="true"><svg class="icon"><use href="#i-lottery"/></svg></span>
       <h1 id="h-lottery">樂透投資</h1>
       <p class="page__desc">選擇彩券，輸入每次買入的金額與頻率，依每個獎項的中獎機率與獎金算出平均能拿回多少（回報率），並模擬 2,000 人照同樣方式買下來的結果。</p>
     </div>
 
     <form class="card" novalidate autocomplete="off" data-endpoint="/api/lottery">
       <div class="card__head">
-        <h2>買入條件</h2>
-        <button type="reset" class="btn btn--ghost">恢復預設</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>買入條件</h2>
+        <button type="reset" class="btn btn--ghost"><svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>恢復預設</button>
       </div>
       <div class="fields">
         <div class="field">
@@ -980,23 +1030,23 @@
 
     <div class="results" data-results>
       <div class="tiles">
-        <div class="tile"><span class="tile__label">總投入金額</span><span class="tile__value" data-out="totalSpent">—</span></div>
-        <div class="tile"><span class="tile__label">期望回報率（稅前）</span><span class="tile__value" data-out="returnRate">—</span></div>
-        <div class="tile tile--primary"><span class="tile__label">期望回報率（稅後）</span><span class="tile__value" data-out="returnRateAfterTax">—</span></div>
-        <div class="tile"><span class="tile__label">平均拿回（稅後）</span><span class="tile__value" data-out="expectedBack">—</span></div>
-        <div class="tile tile--loss"><span class="tile__label">平均虧損</span><span class="tile__value" data-out="expectedLoss">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg><span>總投入金額</span></span><span class="tile__value" data-out="totalSpent">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>期望回報率（稅前）</span></span><span class="tile__value" data-out="returnRate">—</span></div>
+        <div class="tile tile--primary"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-percent"/></svg><span>期望回報率（稅後）</span></span><span class="tile__value" data-out="returnRateAfterTax">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg><span>平均拿回（稅後）</span></span><span class="tile__value" data-out="expectedBack">—</span></div>
+        <div class="tile tile--loss"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trend-down"/></svg><span>平均虧損</span></span><span class="tile__value" data-out="expectedLoss">—</span></div>
       </div>
 
       <article class="advice" aria-labelledby="lottery-advice-title">
         <div class="advice__head">
-          <h2 class="advice__title" id="lottery-advice-title">試算結果</h2>
+          <h2 class="advice__title" id="lottery-advice-title"><svg class="icon" aria-hidden="true"><use href="#i-bulb"/></svg>試算結果</h2>
         </div>
         <p class="advice__summary" data-out="lotterySummary"></p>
         <ul class="advice__list" data-lottery-points></ul>
       </article>
 
       <div class="card card--flush">
-        <div class="card__head"><h2>中幾個才回本</h2><span class="card__meta" data-out="breakEvenMeta"></span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-scale"/></svg>中幾個才回本</h2><span class="card__meta" data-out="breakEvenMeta"></span></div>
         <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="中幾個才回本，可捲動">
           <table class="data-table data-table--summary">
             <thead><tr><th scope="col">獎項</th><th scope="col">稅後獎金</th><th scope="col">回本要中</th><th scope="col">期間內預計中獎</th><th scope="col">中到這麼多個的機率</th></tr></thead>
@@ -1006,14 +1056,14 @@
       </div>
 
       <div class="tiles tiles--secondary">
-        <div class="tile"><span class="tile__label">模擬：一般人拿回（中位數）</span><span class="tile__value" data-out="simMedian">—</span></div>
-        <div class="tile"><span class="tile__label">模擬：沒有虧損的人</span><span class="tile__value" data-out="breakEven">—</span></div>
-        <div class="tile"><span class="tile__label">期間內至少中一次頭獎</span><span class="tile__value" data-out="jackpotChance">—</span></div>
-        <div class="tile"><span class="tile__label">對照：改成定期投資</span><span class="tile__value" data-out="compareValue">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span>模擬：一般人拿回（中位數）</span></span><span class="tile__value" data-out="simMedian">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>模擬：沒有虧損的人</span></span><span class="tile__value" data-out="breakEven">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg><span>期間內至少中一次頭獎</span></span><span class="tile__value" data-out="jackpotChance">—</span></div>
+        <div class="tile"><span class="tile__label"><svg class="icon" aria-hidden="true"><use href="#i-trend-up"/></svg><span>對照：改成定期投資</span></span><span class="tile__value" data-out="compareValue">—</span></div>
       </div>
 
       <div class="card card--flush">
-        <div class="card__head"><h2>各獎項的中獎機率與獎金</h2><span class="card__meta" data-out="prizeMeta"></span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg>各獎項的中獎機率與獎金</h2><span class="card__meta" data-out="prizeMeta"></span></div>
         <div class="table-wrap table-wrap--auto" tabindex="0" aria-label="各獎項的中獎機率與獎金，可捲動">
           <table class="data-table data-table--summary data-table--prizes">
             <thead><tr><th scope="col">獎項</th><th scope="col">中獎條件</th><th scope="col">中獎機率</th><th scope="col">每注獎金</th><th scope="col">稅後獎金</th><th scope="col">每注期望值</th><th scope="col">占回報</th><th scope="col">期間內預計中獎</th><th scope="col">至少中一次</th></tr></thead>
@@ -1024,7 +1074,7 @@
       </div>
 
       <div class="card card--flush">
-        <div class="card__head"><h2>逐年明細</h2><span class="card__meta" data-out="rowsMeta"></span></div>
+        <div class="card__head"><h2><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>逐年明細</h2><span class="card__meta" data-out="rowsMeta"></span></div>
         <div class="table-wrap" tabindex="0" aria-label="逐年明細，可捲動">
           <table class="data-table">
             <thead><tr><th scope="col">年度</th><th scope="col">累積投入</th><th scope="col">平均拿回（稅後）</th><th scope="col">平均虧損</th><th scope="col">對照：定期投資</th></tr></thead>
@@ -1040,13 +1090,63 @@
 
 <footer class="footer container">
   <p>試算結果僅供參考，實際金額以金融機構為準。</p>
-  <p class="footer__version">FullMoney 理財試算 <span data-version></span></p>
+  <p class="footer__version">全算利計算器 <span data-version></span></p>
 </footer>
 
 <div class="update-bar" role="status" data-update hidden>
   <p class="update-bar__text">網站已更新到新版本，重新整理後就會使用最新內容。</p>
   <button type="button" class="btn btn--primary" data-update-reload>重新整理</button>
 </div>
+
+<!-- 說明視窗：第一次開啟網站時自動顯示一次，之後按右上角「說明」開啟 -->
+<dialog class="help" id="helpDialog" aria-labelledby="help-title">
+  <div class="help__hero">
+    <svg class="help__art" viewBox="0 0 120 80" aria-hidden="true">
+      <path class="help__base" d="M4 72.5h112"/>
+      <rect class="help__bar" x="6" y="64" width="12" height="8" rx="2.5" fill-opacity=".3"/>
+      <rect class="help__bar" x="24" y="60" width="12" height="12" rx="2.5" fill-opacity=".4"/>
+      <rect class="help__bar" x="42" y="54" width="12" height="18" rx="2.5" fill-opacity=".5"/>
+      <rect class="help__bar" x="60" y="45" width="12" height="27" rx="2.5" fill-opacity=".65"/>
+      <rect class="help__bar" x="78" y="32" width="12" height="40" rx="2.5" fill-opacity=".8"/>
+      <rect class="help__bar" x="96" y="14" width="12" height="58" rx="2.5"/>
+      <path class="help__curve" d="M10 56C34 53 56 46 70 36S92 16 101 7"/>
+      <path class="help__curve" d="M94 6.5h8v8"/>
+      <path class="help__spark" d="M24 18v10M19 23h10M42 6v6M39 9h6"/>
+    </svg>
+    <div class="help__intro">
+      <h2 class="help__title" id="help-title">歡迎使用全算利計算器</h2>
+      <p class="help__lead">方便大家評估、計算投資的報酬與獲利。希望大家長期投資，運用複利讓資產一年一年增加。</p>
+    </div>
+    <button type="button" class="help__close" data-help-close aria-label="關閉說明">
+      <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </div>
+  <div class="help__body" tabindex="-1" autofocus>
+    <h3 class="help__sub">各頁籤說明 <span class="help__sub-hint">點一下直接前往</span></h3>
+    <ul class="help__tabs">
+      <li><a class="help__tab" href="#compound" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-compound"/></svg></span><span class="help__tab-text"><b>複利試算</b><span>每年固定投入、固定年利率，看長期累積的財富與獲利。</span></span></a></li>
+      <li><a class="help__tab" href="#floating" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-floating"/></svg></span><span class="help__tab-text"><b>複利試算（浮動）</b><span>年利率與加碼金額在區間內隨機變動，模擬報酬有高有低。</span></span></a></li>
+      <li><a class="help__tab" href="#mortgage" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-mortgage"/></svg></span><span class="help__tab-text"><b>房貸計算</b><span>每月還款與利息總額，可加入分段利率與提前還款。</span></span></a></li>
+      <li><a class="help__tab" href="#bond" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-bond"/></svg></span><span class="help__tab-text"><b>債券計算</b><span>持有到期的配息、殖利率與年化報酬，外幣債可換算台幣。</span></span></a></li>
+      <li><a class="help__tab" href="#currency" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-currency"/></svg></span><span class="help__tab-text"><b>貨幣投資</b><span>換匯後定存再換回，算出利息、匯兌損益與總報酬。</span></span></a></li>
+      <li><a class="help__tab" href="#dca" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span><span class="help__tab-text"><b>定期定額</b><span>基金、ETF、股票定期投入，比較保守、中間、樂觀的期末市值。</span></span></a></li>
+      <li><a class="help__tab" href="#plan" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg></span><span class="help__tab-text"><b>投資計畫</b><span>依期望獲利算出需要的年化報酬率，列出資產配置與達成機率。</span></span></a></li>
+      <li><a class="help__tab" href="#lottery" data-help-link><span class="help__tab-icon"><svg class="icon" aria-hidden="true"><use href="#i-lottery"/></svg></span><span class="help__tab-text"><b>樂透投資</b><span>彩券的期望回報率與中獎機率，並對照同樣的錢改成定期投資。</span></span></a></li>
+    </ul>
+    <h3 class="help__sub">使用小提示</h3>
+    <ul class="help__tips">
+      <li><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg><span>修改條件後結果立即更新；「投資計畫」按「開始試算」才計算。</span></li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg><span>試算條件會保存在這台裝置，下次開啟自動還原；按「恢復預設」回到預設值。</span></li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg><span>右上角「外觀設定」可切換主題色系與字體大小。</span></li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span>試算結果僅供參考，實際金額以金融機構為準。</span></li>
+    </ul>
+  </div>
+  <div class="help__foot">
+    <button type="button" class="btn btn--primary" data-help-close>
+      <svg class="icon" aria-hidden="true"><use href="#i-trend-up"/></svg>開始試算
+    </button>
+  </div>
+</dialog>
 
 <template id="tpl-withdraw-row">
   <div class="period-row">

@@ -11,9 +11,9 @@
 
   <groupId>com.fullmoney</groupId>
   <artifactId>fullcalmoney</artifactId>
-  <version>2.2.1</version>
+  <version>2.4.0</version>
   <packaging>jar</packaging>
-  <name>FullMoney 理財試算</name>
+  <name>全算利計算器</name>
 
   <properties>
     <maven.compiler.release>17</maven.compiler.release>

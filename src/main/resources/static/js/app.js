@@ -1,4 +1,4 @@
-/* FullMoney 理財試算：條件一改變就呼叫後端 API 重算，計算全部在 Java 端 */
+/* 全算利計算器：條件一改變就呼叫後端 API 重算，計算全部在 Java 端 */
 'use strict';
 
 (() => {
@@ -1841,6 +1841,27 @@
     applyFont(root.dataset.font, false);
   }
 
+  /* ---------- 說明視窗：第一次開啟網站時自動顯示一次，之後按右上角「說明」開啟 ---------- */
+  function initHelp() {
+    const dialog = $('#helpDialog');
+    const toggle = $('#helpToggle');
+    //不支援 <dialog> 的舊瀏覽器不顯示說明按鈕
+    if (typeof dialog.showModal !== 'function') {
+      toggle.hidden = true;
+      return;
+    }
+    const open = () => { if (!dialog.open) dialog.showModal(); };
+    toggle.addEventListener('click', open);
+    //點關閉鈕、視窗外的暗色背景，或點頁籤說明（連結會切換分頁）時關閉
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog || e.target.closest('[data-help-close], [data-help-link]')) dialog.close();
+    });
+    if (!store.get('fm.helpSeen')) {
+      store.set('fm.helpSeen', '1');
+      open();
+    }
+  }
+
   /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency、#dca、#plan、#lottery；網址沒指定時回到上次的分頁 ---------- */
   const pages = {};
 
@@ -1857,13 +1878,14 @@
         tab.removeAttribute('aria-current');
       }
     });
-    document.title = `${$(`#h-${id}`).textContent} - FullMoney 理財試算`;
+    document.title = `${$(`#h-${id}`).textContent} - 全算利計算器`;
     pages[id].activate();
   }
 
   /* ---------- 啟動 ---------- */
   async function start() {
     initSettings();
+    initHelp();
     await loadEngine();
 
     let meta = {};
