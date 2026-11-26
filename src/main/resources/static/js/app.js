@@ -308,6 +308,8 @@
 
     async run() {
       clearTimeout(this.timer);
+      //timer 不為 0 表示還有等打字結束的重算（下載 PDF 前會先算完）
+      this.timer = 0;
       if (this.controller) this.controller.abort();
       const controller = new AbortController();
       this.controller = controller;
@@ -590,6 +592,10 @@
 
   /* ---------- 投資計畫圖表：手寫 SVG（網站的 CSP 只允許同源腳本，不載入外部圖表函式庫） ---------- */
 
+  /** 圖表寬度：平常依容器寬度；列印（下載 PDF）時固定為紙張寬度，字級才與畫面相同 */
+  let printChartWidth = 0;
+  const chartWidth = (box) => Math.max(printChartWidth || box.clientWidth, 280);
+
   /** 座標軸用的精簡金額 ex. 2,150,000 → 215 萬、120,000,000 → 1.2 億 */
   const compactMoney = (n) => {
     const abs = Math.abs(n);
@@ -661,7 +667,7 @@
    * 線尾直接標示類型名稱，滑鼠或手指移動時縱線對齊最近的年度並列出每條線的金額
    */
   function growthChart(box, d) {
-    const width = Math.max(box.clientWidth, 280);
+    const width = chartWidth(box);
     const height = width < 480 ? 240 : 290;
     const m = { top: 14, right: width < 480 ? 64 : 84, bottom: 28, left: width < 480 ? 46 : 58 };
     const plotW = width - m.left - m.right;
@@ -757,7 +763,7 @@
    * 虛線為目標金額；滑過一列顯示三個金額與達成機率
    */
   function rangeChart(box, d) {
-    const width = Math.max(box.clientWidth, 280);
+    const width = chartWidth(box);
     const narrow = width < 480;
     //有壓力測試時，每列多一條虛線區間（同一組走勢、情境年份換成情境報酬）
     const stressed = d.portfolios.some((p) => p.stress);
@@ -1175,7 +1181,7 @@
    * 滑鼠或手指移動時縱線對齊最近的年度，列出各情境的市值
    */
   function dcaChart(box, d) {
-    const width = Math.max(box.clientWidth, 280);
+    const width = chartWidth(box);
     const narrow = width < 480;
     const height = narrow ? 240 : 290;
     const single = d.scenarios.length === 1;
@@ -1959,6 +1965,91 @@
     }
   }
 
+  /*
+   * ---------- 下載 PDF ----------
+   * 網站的 CSP 只允許同源腳本、不載入外部函式庫，改用瀏覽器的列印功能另存 PDF：
+   * 中文字、表格與圖表都是向量，檔案小、文字可選取。版面見 app.css 的 @media print（只印目前分頁、一律淺色）。
+   */
+  /** 列印時的圖表寬度：A4 扣掉頁邊與卡片內距約 680px */
+  const PRINT_CHART_WIDTH = 680;
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const currentPage = () => $('.page:not([hidden])');
+
+  /** 重畫目前分頁的圖表（列印前後寬度不同） */
+  function redrawCharts() {
+    if (lastPlan && !lastPlan.scope.hidden) renderPlanCharts(lastPlan.d, lastPlan.scope);
+    if (lastDca && !lastDca.scope.hidden) renderDcaChart(lastDca.d, lastDca.scope);
+  }
+
+  function initPdf() {
+    const button = $('#pdfButton');
+    const label = $('[data-pdf-label]', button);
+    const time = $('[data-print-time]');
+    let restore = null;
+
+    //列印前：標題改成另存 PDF 的預設檔名、有資料的清單展開、沒有資料的不印、圖表以紙張寬度重畫；按 Ctrl+P 也適用
+    const prepare = () => {
+      const page = currentPage();
+      if (restore || !page) return;
+      const now = new Date();
+      const [y, m, d] = [now.getFullYear(), pad2(now.getMonth() + 1), pad2(now.getDate())];
+      const title = document.title;
+      document.title = `全算利計算器_${$('h1', page).textContent}_${y}${m}${d}`;
+      time.textContent = `產生時間 ${y}/${m}/${d} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+      const opened = [];
+      const empty = [];
+      $$('details', page).forEach((details) => {
+        if (!$('.input', details)) {
+          details.classList.add('is-print-empty');
+          empty.push(details);
+        } else if (!details.open) {
+          details.open = true;
+          opened.push(details);
+        }
+      });
+      printChartWidth = PRINT_CHART_WIDTH;
+      redrawCharts();
+      restore = () => {
+        document.title = title;
+        opened.forEach((details) => { details.open = false; });
+        empty.forEach((details) => details.classList.remove('is-print-empty'));
+        printChartWidth = 0;
+        redrawCharts();
+      };
+    };
+    const finish = () => {
+      if (!restore) return;
+      restore();
+      restore = null;
+    };
+    window.addEventListener('beforeprint', prepare);
+    window.addEventListener('afterprint', finish);
+
+    button.addEventListener('click', async () => {
+      const page = pages[currentPage().dataset.page];
+      if (!page) return; //網站還在載入
+      //結果要對應目前的條件：還沒算過、打字後還在等重算、投資計畫改了條件還沒按試算，就先算完。
+      //結果已是最新時直接列印，不經過 await，部分瀏覽器才不會因為不是使用者操作而擋下列印視窗
+      if (!page.loaded || page.timer || page.results.classList.contains('is-stale')) {
+        button.disabled = true;
+        label.textContent = '準備中…';
+        try {
+          await page.run();
+        } finally {
+          button.disabled = false;
+          label.textContent = '下載 PDF';
+        }
+      }
+      //條件有誤時不印，捲到錯誤訊息
+      if (!page.alert.hidden) {
+        page.alert.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        return;
+      }
+      prepare();
+      window.print();
+    });
+  }
+
   /* ---------- 分頁切換：網址 #compound、#floating、#mortgage、#bond、#currency、#dca、#plan、#lottery；網址沒指定時回到上次的分頁 ---------- */
   const pages = {};
 
@@ -1983,6 +2074,7 @@
   async function start() {
     initSettings();
     initHelp();
+    initPdf();
     await loadEngine();
 
     let meta = {};

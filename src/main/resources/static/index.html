@@ -51,6 +51,7 @@
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01" stroke-width="2.4"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-device" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M11 18.5h2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M4.5 15.5v3A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-3"/></symbol>
   <!-- 外觀設定：三個重疊的圓（混色），本專案自行繪製 -->
   <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="8.6" cy="9" r="5.2" fill="currentColor" fill-opacity=".16"/><circle cx="15.4" cy="9" r="5.2" fill="currentColor" fill-opacity=".16"/><circle cx="12" cy="14.9" r="5.2" fill="currentColor" fill-opacity=".16"/></symbol>
 </svg>
@@ -67,6 +68,11 @@
       <span class="brand__name">全算利計算器</span>
     </a>
     <div class="topbar__actions">
+      <!-- 下載 PDF：開啟瀏覽器的列印視窗，只印目前分頁的條件與結果，目的地選「另存為 PDF」 -->
+      <button type="button" class="header-btn" id="pdfButton" aria-label="下載 PDF：目前分頁的試算條件與結果">
+        <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+        <span class="header-btn__text" data-pdf-label>下載 PDF</span>
+      </button>
       <button type="button" class="header-btn" id="helpToggle" aria-haspopup="dialog" aria-controls="helpDialog" aria-label="使用說明">
         <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>
         <span class="header-btn__text">說明</span>
@@ -121,6 +127,12 @@
 </header>
 
 <main id="main" class="container main" tabindex="-1">
+
+  <!-- 下載 PDF（列印）時才顯示：網站名稱與產生時間 -->
+  <div class="print-head" aria-hidden="true">
+    <span class="print-head__brand">全算利計算器</span>
+    <span class="print-head__time" data-print-time></span>
+  </div>
 
   <!-- 複利試算 -->
   <section class="page" id="page-compound" data-page="compound" aria-labelledby="h-compound">
@@ -1147,6 +1159,7 @@
     <ul class="help__tips">
       <li><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg><span>修改條件後結果立即更新；「投資計畫」按「開始試算」才計算。</span></li>
       <li><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg><span>試算條件會保存在這台裝置，下次開啟自動還原；按「恢復預設」回到預設值。</span></li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span>右上角「下載 PDF」把目前分頁的條件與結果存成 PDF：在列印視窗的目的地選「另存為 PDF」。</span></li>
       <li><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg><span>右上角「外觀設定」可切換主題色系與字體大小。</span></li>
       <li><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span>試算結果僅供參考，實際金額以金融機構為準。</span></li>
     </ul>
